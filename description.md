@@ -14,4 +14,5 @@ Each report contains both an overview and details of the verification. The overv
 
 ## User task: query policies and reports
 
-Users can query policies, routes, reports, and specific report items for a given AS, vice versa. For example, query for the reports related to a specific AS; and query for the ASes that have a specific type of report item.
+Users can query policies, routes, reports, and specific report items for a given AS, vice versa for specific use. 
+For example, query for the reports related to a specific AS; and query for the ASes that have a specific type of report item.
