@@ -12,7 +12,9 @@ We verify observed routes against the recorded policies to generate reports. Obs
 
 Each report contains both an overview and details of the verification. The overview ranges from "ok" to "bad". The details are lists of specific report items including the error types, skip reasons, and special cases.
 
-## User task: query policies and reports
+We use [Internet Route Verification](https://github.com/SichangHe/internet_route_verification) to generate the reports.
 
-Users can query policies, routes, reports, and specific report items for a given AS, vice versa for specific use. 
+## User-facing functionality: query policies and reports
+
+Users can query policies, routes, reports, and specific report items for a given AS, vice versa for specific use.
 For example, query for the reports related to a specific AS; and query for the ASes that have a specific type of report item.
