@@ -14,6 +14,11 @@ Each report contains both an overview and details of the verification. The overv
 
 We use [Internet Route Verification](https://github.com/SichangHe/internet_route_verification) to generate the reports.
 
+## Motivation/ needs
+
+- A structured way to query the IRR with a focus on routing policies.
+- Storage and structured query for the large amount of observed routes and verification reports generated from them.
+
 ## User-facing functionality: query RPSL, routes, and reports
 
 Users can query RPSL, routes, reports, and specific report items for a given AS, vice versa for specific use.
