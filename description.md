@@ -14,7 +14,55 @@ Each report contains both an overview and details of the verification. The overv
 
 We use [Internet Route Verification](https://github.com/SichangHe/internet_route_verification) to generate the reports.
 
-## User-facing functionality: query policies and reports
+## User-facing functionality: query RPSL, routes, and reports
 
-Users can query policies, routes, reports, and specific report items for a given AS, vice versa for specific use.
-For example, query for the reports related to a specific AS; and query for the ASes that have a specific type of report item.
+Users can query RPSL, routes, reports, and specific report items for a given AS, vice versa for specific use.
+For example, query for the reports related to a specific AS; query for the ASes that have a specific type of report item; and query for routes related to a specific maintainer.
+
+## Sketch of database design
+
+```mermaid
+erDiagram
+im_export_report ||--o{ report_item : has
+im_export_report {
+    import bool
+    overall_type enum
+}
+report_item {
+    category enum
+    specific_case enum
+    str_content varchar(nullable)
+    num_content bigint
+}
+path ||--|{ im_export_report : contains
+path }|--|{ aut_num : goes-through
+aut_num {
+    as_num bigint
+    as_name varchar
+}
+observed_route ||--|| path : corresponds-to
+observed_route }o--|| route_obj : corresponds-to
+route_obj {
+    route varchar
+    is_v6 bool
+}
+route_set }o--|{ route_obj: contains
+route_obj }|--|| aut_num : belongs-to
+as_set ||--o{ aut_num : contains
+as_set ||--o{ as_set : contains
+rpsl_obj {
+    name varchar
+    body varchar
+}
+aut_num |o--|| rpsl_obj : is
+as_set |o--|| rpsl_obj : is
+peering_set |o--|| rpsl_obj : is
+filter_set |o--|| rpsl_obj : is
+route_set |o--|| rpsl_obj : is
+route_obj |o--|| rpsl_obj : is
+aut_num ||--|| mntner : by
+as_set }o--o{ mntner: mbrs-by-ref
+route_set }o--o{ mntner: mbrs-by-ref
+```
+
+- All objects have `time_updated`.
