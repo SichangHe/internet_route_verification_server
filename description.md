@@ -37,18 +37,29 @@ report_item {
     category enum
     specific_case enum
     str_content varchar(nullable)
-    num_content bigint
+    num_content int
 }
 path ||--|{ im_export_report : contains
 path }|--|{ aut_num : goes-through
 aut_num {
-    as_num bigint
+    as_num int
     as_name varchar
+}
+provider_customer }o--|{ aut_num : is-about
+provider_customer {
+    provider int
+    customer int
 }
 observed_route ||--|| path : corresponds-to
 observed_route }o--|| route_obj : corresponds-to
+peer }o--|{ aut_num : are
+peer {
+    peer_1 int
+    peer_2 int
+}
 route_obj {
     route varchar
+    length int
     is_v6 bool
 }
 route_set }o--|{ route_obj: contains
