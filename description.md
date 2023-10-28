@@ -52,7 +52,7 @@ route_obj {
     is_v6 bool
 }
 route_set }o--|{ route_obj: contains
-route_obj }|--|| aut_num : belongs-to
+route_obj }|--|| aut_num : origin
 as_set ||--o{ aut_num : contains
 as_set ||--o{ as_set : contains
 rpsl_obj {
