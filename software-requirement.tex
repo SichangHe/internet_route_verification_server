@@ -1,0 +1,369 @@
+\documentclass[12pt]{article}
+
+\usepackage[backend=bibtex]{biblatex}
+\bibliography{main}
+
+\begin{document}
+
+Authors:
+
+Customer:
+
+Instructor:
+
+\section{{}{Introduction (Due Nov. 16)}}\label{introduction-due-nov.-16}
+
+Placeholder~\cite{alaettinoglurfc}.
+
+Placeholder~\cite{blunk2005rfc}.
+
+\begin{itemize}
+\item
+  Provide an overview of the entire SRS subsections
+\item
+  Indicate the topics that will be covered in this document.
+\end{itemize}
+
+Start of your text.
+
+\section{Purpose}\label{purpose}
+
+\begin{itemize}
+\item
+  What's the purpose of the SRS document?
+\item
+  Specify the intended audience.
+\end{itemize}
+
+Start of your text.
+
+\section{Scope}\label{scope}
+
+\begin{itemize}
+\item
+  Identify SW product(s) to be produced by name
+\item
+  Describe the application of SW being specified, including benefits,
+  objectives, goals. What is the application domain? (e.g., embedded
+  system for automotive systems, graphical modeling utility) This is the
+  domain description of the application.
+\item
+  Explain what SW product will, and if necessary, will not do. This is
+  the requirement of the application.
+\item
+  Be consistent with similar statements in higher-level specifications
+  (e.g., the original project specification from customer)
+\end{itemize}
+
+\section*{}\label{section}
+\addcontentsline{toc}{section}{}
+
+Start of your text.
+
+\section{Definitions, acronyms, and
+abbreviations}\label{definitions-acronyms-and-abbreviations}
+
+\begin{itemize}
+\item
+  Define all terns, acronyms, and abbreviations need to understand the
+  SRS. If this section is extensive, then move to an appendix. It is
+  also possible to provide a link to other resources for extensive
+  terminology explanation.
+\end{itemize}
+
+\section*{}\label{section-1}
+\addcontentsline{toc}{section}{}
+
+Start of your text.
+
+\section{Organization}\label{organization}
+
+\begin{itemize}
+\item
+  Describe what the rest of the SRS contains
+\item
+  Give the organizational structure of the SRS.
+\end{itemize}
+
+Start of your text.
+
+\section{{Overall Description \emph{(Due Nov.
+16)}}{Overall Description (Due Nov. 16)}}\label{overall-description-due-nov.-16}
+
+\begin{itemize}
+\item
+  Give a brief introduction of what information will be covered in this
+  section.
+\end{itemize}
+
+Start of your text.
+
+\section{Product Perspective}\label{product-perspective}
+
+\begin{itemize}
+\item
+  Describe the context for the product
+\item
+  Is it one element that is part of a bigger system? If so, then give a
+  pictoral representation or diagram (e.g., data flow diagram -- DFD,
+  block diagram) that describes how your product fits.
+\item
+  Interface Constraints:
+
+  \begin{itemize}
+  \item
+    System interfaces
+  \item
+    User interfaces
+  \item
+    HW interfaces
+  \item
+    SW interfaces
+  \item
+    Communication interfaces
+  \end{itemize}
+\item
+  Other types of constraints:
+
+  \begin{itemize}
+  \item
+    Memory
+  \item
+    Operations
+  \item
+    Site adaptation operations (customization that is done on-site).
+  \end{itemize}
+\end{itemize}
+
+Start of your text.
+
+\section{Product Functions}\label{product-functions}
+
+\begin{itemize}
+\item
+  Summarize the major functions that software will perform (portions may
+  come directly from the customer specification -- cite as appropriate).
+\item
+  These function descriptions should be easily understandable by the
+  customer or to any general reader.
+\item
+  Diagrams: (for all diagrams, introduce the notation first)
+
+  \begin{itemize}
+  \item
+    Give and describe a high-level goal diagram for system.
+  \end{itemize}
+\end{itemize}
+
+Start of your text.
+
+\section{User Characteristics}\label{user-characteristics}
+
+\begin{itemize}
+\item
+  Expectations about the user (e.g., background, skill level, general
+  expertise)
+\end{itemize}
+
+Start of your text.
+
+\section{Constraints}\label{constraints}
+
+\begin{itemize}
+\item
+  See list of possible constraints from IEEE SRS document.
+\item
+  Give English descriptions of safety-critical properties
+\item
+  Give English descriptions of other properties that if violated, the
+  system will not perform properly.
+\item
+  For at least two of the properties, create a SCR specification that
+  specifies how the relevant system elements should behave in order to
+  satisfy the property. (Recall that SCR is most effective when you have
+  complex logic for handling events; select the properties
+  appropriately.)
+
+  \begin{itemize}
+  \item
+    Create event, condition, and mode transition tables (explain)
+  \end{itemize}
+\end{itemize}
+
+Start of your text.
+
+\section{Assumptions and
+Dependencies}\label{assumptions-and-dependencies}
+
+\begin{itemize}
+\item
+  Assumptions made about the HW, SW, environment, user interactions.
+\end{itemize}
+
+Start of your text.
+
+\section{Approportioning of
+Requirements}\label{approportioning-of-requirements}
+
+\begin{itemize}
+\item
+  Based on negotiations with customers, requirements that are determined
+  to be beyond the scope of the current project and may be addressed in
+  future versions/releases.
+\end{itemize}
+
+Start of your text.
+
+\section{{Specific Requirements \emph{(Due Nov.
+16)}}{Specific Requirements (Due Nov. 16)}}\label{specific-requirements-due-nov.-16}
+
+\begin{itemize}
+\item
+  Give an enumerated list of requirements.
+\item
+  As appropriate, use a hierarchical numbering scheme.
+\end{itemize}
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\item
+  Sample requirement at the top level
+
+  \begin{enumerate}
+  \def\labelenumii{\arabic{enumii}.}
+  \item
+    Level 2 requirement example
+  \item
+    Another Level 2 requirement
+  \end{enumerate}
+\item
+  Select the ``Requirement'' Style.
+\end{enumerate}
+
+\section{{Modeling Requirements
+\emph{(1\textsuperscript{st} draft: Nov. 28; Final draft: Dec.
+7)}}{Modeling Requirements (1st draft: Nov. 28; Final draft: Dec. 7)}}\label{modeling-requirements-1st-draft-nov.-28-final-draft-dec.-7}
+
+\begin{itemize}
+\item
+  This is the specification portion of the requirements document.
+  (Specifying the bridge between the application domain and the machine
+  domain.)
+
+  \begin{itemize}
+  \item
+    Give and describe use case diagrams
+  \end{itemize}
+\item
+  Check: Every goal at the bottom of the goal model should be addressed
+\item
+  Each goal may be satisfied by 1 or more use cases
+\item
+  Each use case should refer to 1 or more requirements (in Section 4)
+
+  \begin{itemize}
+  \item
+    Give and describe a high-level class diagram that depicts the key
+    elements of the system
+  \item
+    Representative Scenarios of System:
+
+    \begin{itemize}
+    \item
+      Give English descriptions of representative scenarios for each use
+      cases.
+    \end{itemize}
+  \end{itemize}
+\item
+  Check: use instances of the class names from class diagram; refer to
+  the terms used in use case diagram
+
+  \begin{itemize}
+  \item
+    For each scenario, give a corresponding sequence diagram
+  \end{itemize}
+\item
+  Check: Objects should be instances of classes in class diagram
+
+  \begin{itemize}
+  \item
+    Create and explain a state diagram for all key classes that
+    participate in the scenarios (from above).
+  \end{itemize}
+\item
+  Check: that all scenarios can be validated against the state diagrams.
+\item
+  Check that the events, actions are modeled in the class diagram.
+\item
+  Check that all variables referenced in the diagrams are declared as
+  attributes in the class diagram.
+\end{itemize}
+
+Start of your text.
+
+\section{{Prototype \emph{(Due Nov. 27, 5:00
+p.m.)}}{Prototype (Due Nov. 27, 5:00 p.m.)}}\label{prototype-due-nov.-27-500-p.m.}
+
+\begin{itemize}
+\item
+  Describe what your prototype will show in terms of system
+  functionality.
+\end{itemize}
+
+\section{How to Run Prototype}\label{how-to-run-prototype}
+
+\begin{itemize}
+\item
+  Describe what is needed to run your prototype
+\item
+  What system configuration? (Should be accessible through web.) Are
+  there plugins? Are there any OS or networking constraints. Give the
+  URL for the prototype (if running from your website). Minimally, there
+  should be a prototype link on your webpage that is executable.
+\end{itemize}
+
+\section{Sample Scenarios}\label{sample-scenarios}
+
+\begin{itemize}
+\item
+  Give a sample scenario of using your system. Use real data and problem
+  scenarios. Include screen captures illustrating what your prototype
+  produces. As always, be sure to describe all figures.
+\end{itemize}
+
+\section{References}\label{references}
+
+\begin{itemize}
+\item
+  Provide list of all documents referenced in the SRS
+\item
+  Identify each document by title, report number, date, and publishing
+  organization.
+\item
+  Specify the sources from which the references can be obtained.
+\item
+  Include an entry for your project website.
+\end{itemize}
+
+Start of your text.
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\item
+  D. Thakore and S. Biswas, ``Routing with Persistent Link Modeling in
+  Intermittently Connected Wireless Networks,'' Proceedings of IEEE
+  Military Communication, Atlantic City, October 2005.
+\end{enumerate}
+
+\section{Point of Contact}\label{point-of-contact}
+
+For further information regarding this document and project, please
+contact \textbf{Prof. Betty H.C. Cheng} at Michigan State University
+(chengb at cse.msu.edu). All materials in this document have been
+sanitized for proprietary data. The students and the instructor
+gratefully acknowledge the participation of our industrial
+collaborators.
+
+\printbibliography
+
+\end{document}
