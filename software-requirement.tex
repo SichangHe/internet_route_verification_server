@@ -3,6 +3,8 @@
 \usepackage[backend=bibtex]{biblatex}
 \bibliography{main}
 
+\usepackage{parskip}
+
 \title{Software Requirement Specification for Route Verification Server}
 \author
     {Authors: Sichang He (Steven), Shouju Wang\\
@@ -12,12 +14,15 @@
 
 \begin{document}
 \maketitle
+\raggedright
 
 \section{Introduction}
 % Identify SW product(s) to be produced by name
-We shall produce a REST API server \verb|route_verification_server| and
+We shall produce a REST API server \verb|route_verification_server|,
 a Python client library \verb|route_verification_client| for
-convenient requests to the server.
+convenient requests to the server,
+and a set of scripts \verb|route_verification_server_loader| to
+load data into \verb|route_verification_server|'s database.
 
 % Describe the application of SW being specified, including benefits,
 % objectives, goals. What is the application domain? (e.g., embedded
@@ -34,7 +39,8 @@ verification reports in its internal database.
 It will also respond to query requests by querying the database.
 However,
 \verb|route_verification_server| will not collect routing policies or
-generate verification reports.
+generate verification reports;
+these tasks are instead performed by \verb|route_verification_server_loader|.
 \verb|route_verification_client| will request the server for information
 using its REST API,
 but it will not directly query the server's internal database.
@@ -183,11 +189,45 @@ query RPSL, routes, and verification reports.
 We also assume that the users are capable of Python scripting with
 our provided client library to fulfill their needs.
 
-\section{System requirements specification }
+\section{System requirements specification}
+From a system perspective, data should be stored in a well-designed data structure efficiently for further use.
 \begin{itemize}
     \item Store parsed policy IR as JSON serialization.
+    JSON offers a lightweight and human-readable format, making it an optimal choice for storing routing policies and related information.
+    The parsed policy IR, when stored as JSON serialization, will encompass a hierarchical structure, with key-value pairs representing various aspects of routing policies. This structure will be designed to accommodate policy details, AS-specific rules, routing preferences, and any additional metadata.
+\end{itemize}
+The storage mechanism also should be implemented in a suitable way.
+\begin{itemize}
+    \item The JSON serialization of policy IR data will be stored within a designated database. The choice of the storage mechanism, implemented in the relational database MySQL, will be made to optimize retrieval, query performance, and scalability in alignment with system requirements.
+\end{itemize}
+Data management 
+\begin{itemize}
+    \item Data management procedures will include methods for parsing, updating, querying, and indexing JSON-serialized policy data. Additionally, data retention and archival policies may be defined to maintain historical policy records.
+\end{itemize}
+Data Access
+\begin{itemize}
+    \item The system shall provide standardized APIs for reading, writing, and querying JSON-serialized policy IR data. These APIs will be designed to ensure secure and efficient access to the stored policy information.
     % TODO: continue
 \end{itemize}
+
+REST API endpoints.
+\begin{itemize}
+    \item Retrieve RPSL objects by name.
+    The REST API server shall provide an endpoint that allows users to retrieve Routing Policy Specification Language (RPSL) objects by their respective names. RPSL objects are integral components of routing policies, and the ability to retrieve them by name is a fundamental feature of the system.
+
+    The endpoint shall be designed to accept HTTP GET requests with parameters or URL paths that specify the name or identifier of the RPSL object to be retrieved. The name parameter will be used to identify and locate the RPSL object within the system's data repository.
+
+    Access to this endpoint may be subject to user authentication and authorization to ensure that only authorized users can retrieve RPSL objects. Authentication methods, such as token-based authentication, may be implemented to secure access.
+
+    The API endpoint shall respond with RPSL objects in a structured format, such as JSON or XML, depending on the system's supported data serialization formats. The response will include all relevant details and attributes associated with the requested RPSL object.
+\end{itemize}
+ Usage Scenarios From System Perspective
+ \begin{itemize}
+     \item Retrieving RPSL objects associated with specific Autonomous Systems (ASes).
+     \item Querying and accessing detailed routing policy information based on RPSL object names.
+     \item Integration with network management systems for routing policy analysis.
+ \end{itemize}
+
 
 \section{System Models}
 % Use cases.
