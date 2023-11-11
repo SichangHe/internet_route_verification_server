@@ -74,7 +74,7 @@ create table observed_route(
 	raw_line text not null,
 	address_prefix inet not null,
 );
-create table im_export_report(
+create table exchange_report(
 	report_id serial primary key,
 	from_as int not null references aut_num,
 	-- May not exist.
@@ -92,7 +92,7 @@ create table report_item(
 	-- May not exist.
 	str_content text,
 	num_content int,
-	parent_report int not null references im_export_report,
+	parent_report int not null references exchange_report,
 );
 create table provide_customer(
 	provider int not null references aut_num,
