@@ -48,7 +48,8 @@ create type report_item_type as enum (
 -- Tables.
 create table rpsl_obj(
 	rpsl_obj_name text primary key,
-	body text not null
+	body text not null,
+	recorded_time timestamp not null
 );
 create table mntner(
 	mntner_name text primary key references rpsl_obj,
@@ -72,7 +73,8 @@ create table aut_num(
 create table observed_route(
 	observed_route_id serial primary key,
 	raw_line text not null,
-	address_prefix inet not null
+	address_prefix inet not null,
+	recorded_time timestamp not null
 );
 create table exchange_report(
 	report_id serial primary key,
@@ -82,7 +84,6 @@ create table exchange_report(
 	import bool not null,
 	overall_type overall_report_type not null,
 	parent_observed_route int not null references observed_route,
-	-- TODO: Add recorded_time for the rest of the tables.
 	recorded_time timestamp not null
 );
 create table report_item(
@@ -97,6 +98,7 @@ create table report_item(
 create table provide_customer(
 	provider int not null references aut_num,
 	customer int not null references aut_num,
+	recorded_time timestamp not null,
 	primary key (provider, customer)
 );
 create table peering_set(
@@ -115,6 +117,7 @@ create table route_obj(
 create table peer(
 	peer_1 int not null references aut_num,
 	peer_2 int not null references aut_num,
+	recorded_time timestamp not null,
 	primary key (peer_1, peer_2)
 );
 create table as_set(
@@ -132,12 +135,9 @@ create table as_set_contains_set(
 	primary key (as_set_name, contained_set)
 );
 create table mbrs_by_ref(
-	as_set_name text not null references as_set,
-	--add this line
 	rpsl_obj_name text not null references rpsl_obj,
 	mntner_name text not null references mntner,
-	-- 	primary key (as_set_name, mntner)  commit this line
-	primary key (as_set_name, mntner_name)
+	primary key (rpsl_obj_name, mntner_name)
 );
 create table route_set(
 	route_set_name text primary key references rpsl_obj
