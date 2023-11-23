@@ -25,6 +25,8 @@ To finish our purpose, we need multiple tables, each table has complex attribute
 
 ### Sketch of database design
 
+(Outdated.)
+
 ```mermaid
 erDiagram
 im_export_report ||--o{ report_item : has
