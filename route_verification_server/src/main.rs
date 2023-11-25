@@ -7,13 +7,12 @@ async fn main() -> Result<(), sqlx::Error> {
         .connect("postgres://postgres:postgres@localhost/irv_server_test")
         .await?;
 
-    const TEN: i64 = 10;
-    let row: (i64,) = sqlx::query_as("SELECT $1")
-        .bind(TEN)
+    const BLAH: &str = "blah";
+    let row = sqlx::query!("SELECT $1 as str", BLAH)
         .fetch_one(&pool)
         .await?;
 
-    assert_eq!(row.0, TEN);
+    assert_eq!(row.str, Some(BLAH.to_owned()));
 
     Ok(())
 }

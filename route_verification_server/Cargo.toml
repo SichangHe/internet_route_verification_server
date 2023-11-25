@@ -9,3 +9,6 @@ edition = "2021"
 route_verification = "0.2"
 sqlx = { version = "0.7", features = ["postgres", "runtime-tokio"] }
 tokio = { version = "1", features = ["full"] }
+
+[profile.dev.package.sqlx-macros]
+opt-level = 3
