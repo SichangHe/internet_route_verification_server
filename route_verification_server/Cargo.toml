@@ -7,3 +7,5 @@ edition = "2021"
 
 [dependencies]
 route_verification = "0.2"
+sqlx = { version = "0.7", features = ["postgres", "runtime-tokio"] }
+tokio = { version = "1", features = ["full"] }
