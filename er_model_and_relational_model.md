@@ -1,6 +1,135 @@
 # Entity-Relationship (ER) Model
 
 An ER model representing this group project. Visualization:
+erDiagram
+%% entity sets
+    route_set }o--|{ route_obj: contains
+    route_obj }|--|| aut_num : origin
+    as_set ||--o{ aut_num : contains
+    as_set ||--o{ as_set : contains 
+    route_obj ||--o{ mntner_obj : contains
+    rpsl_obj {
+        text rpsl_obj_name PK
+        text body
+        string timestamp
+    }
+    maintainer ||--|{mntner_obj : contains
+    maintainer {
+        text mntner_name PK
+    }
+    mntner_obj {
+        text mntner_name PK
+        text desc_s
+        text source_s
+    }
+    autonomous_system||--||exchange_report : allow
+    autonomous_system{
+        int as_num PK
+    }
+    path ||--|{ exchange_report : contains
+    path }|--|{ aut_num : goes-through
+    aut_num{
+        int as_num PK
+        text as_name
+        json imports
+        json exports
+        text rpsl_obj_name
+    }
+    observed_route ||--|| path : corresponds-to
+    observed_route }o--|| route_obj : corresponds-to
+    peer }o--|{ aut_num : are
+    observed_route{
+        serial observed_route_id PK
+        text raw_line
+        inet address_prefix
+        timestamp recorded_time
+    }
+    exchange_report ||--o{ report_item : has
+    exchange_report{
+        serial report_id PK
+        int from_as
+        int to_as
+        bool import
+        overall_report_type overall_type
+        int parent_observed_route
+        timestamp recorded_time
+    }
+    report_item ||--||exchange_report : allow
+    report_item{
+        serial report_item_id PK
+        overall_report_type category
+        report_item_type specific_case
+        text str_content
+        int num_content
+        int parent_report
+    }
+    provide_customer }o--|{ aut_num : is-about
+    provide_customer{
+        int provider
+        int customer
+        timestamp recorded_time
+    }
+    peering_set{
+        text peering_set_name
+        json peerings
+    }
+    filter_set{
+        text filter_set_name
+        json filters
+    }
+    route_obj{
+        inet address_prefix PK
+        int origin 
+        text rpsl_obj_name
+    }
+    peer{
+        int peer_1
+        int peer_2
+        timestamp recorded_time
+    }
+    as_set{
+        text as_set_name
+        boolean is_any
+    }
+    as_set_contains_num ||--o{  as_set : contains
+    as_set_contains_num ||--o{  autonomous_system : contain
+    as_set_contains_num{
+        text as_set_name
+        int as_num
+    }
+    as_set_contains_set ||--o{ as_set : contains
+    as_set_contains_set{
+        text as_set_name
+        text contained_set
+    }
+    mbrs_by_ref{
+        text rpsl_obj_name
+        text mntner_name
+    }
+
+    route_set{
+        text route_set_name
+    }
+    route_set_contains_num ||--o{  route_set : contains
+    route_set_contains_num ||--o{  autonomous_system : contains
+    route_set_contains_num{
+        text route_set_name
+        int as_num
+    }
+    route_set_contains_set{
+        text route_set_name
+        text contained_set
+    }
+
+    aut_num |o--|| rpsl_obj : is
+    as_set |o--|| rpsl_obj : is
+    peering_set |o--|| rpsl_obj : is
+    filter_set |o--|| rpsl_obj : is
+    route_set |o--|| rpsl_obj : is
+    route_obj |o--|| rpsl_obj : is
+    aut_num ||--|| mntner : by
+    as_set }o--o{ mntner: mbrs-by-ref
+    route_set }o--o{ mntner: mbrs-by-ref
 
 Explanation and discussion for designed entity sets and relationship sets:
 
