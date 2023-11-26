@@ -114,6 +114,8 @@ Same for `route_set`.
 
 Converted relational database model, visualized in a schema diagram:
 
+![Relational Model Schema](relational_model.png)
+
 Explanation for each step carried out:
 
 The primary key of `rpsl_obj`, `maintainer`, `autonomous_system` in
