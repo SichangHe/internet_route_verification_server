@@ -134,7 +134,7 @@ create table if not exists as_set_contains_num(
 );
 create table if not exists as_set_contains_set(
 	as_set_name text not null references as_set,
-	contained_set text not null,
+	contained_set text not null references as_set,
 	primary key (as_set_name, contained_set)
 );
 create table if not exists mbrs_by_ref(
