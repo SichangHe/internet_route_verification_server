@@ -1,4 +1,10 @@
 /// Launch Postgres and create `irv_server_test` before developing this.
+use anyhow::Result;
+use log::warn;
+use route_verification::{
+    bgp::{Line, Report, ReportItem},
+    ir::AutNum,
+};
 use sqlx::{
     postgres::{PgPoolOptions, PgQueryResult},
     types::ipnetwork::IpNetwork,
@@ -7,6 +13,7 @@ use sqlx::{
 
 #[tokio::main]
 async fn main() -> sqlx::Result<()> {
+    env_logger::init();
     let pool = PgPoolOptions::new()
         .max_connections(5)
         .connect("postgres://postgres:postgres@localhost/irv_server_test")
@@ -44,13 +51,13 @@ async fn insert_route_obj(
     pool: &Pool<Postgres>,
     rpsl_obj_name: &str,
     body: &str,
-    address_prefix: &IpNetwork,
+    address_prefix: &str,
     origin: i32,
 ) -> sqlx::Result<PgQueryResult> {
     insert_rpsl_obj(pool, rpsl_obj_name, body).await?;
     sqlx::query!(
         "insert into route_obj(address_prefix, origin, rpsl_obj_name) values ($1, $2, $3)",
-        address_prefix,
+        address_prefix as _,
         origin,
         rpsl_obj_name
     )
@@ -126,10 +133,205 @@ async fn insert_rpsl_obj(
     .await
 }
 
-// TODO: aut_num.
-// TODO: observed_route.
-// TODO: exchange_report.
-// TODO: report_item.
+async fn insert_aut_num(
+    pool: &Pool<Postgres>,
+    rpsl_obj_name: &str,
+    as_num: i32,
+    as_name: &str,
+    aut_num: &AutNum,
+) -> Result<PgQueryResult> {
+    insert_rpsl_obj(pool, rpsl_obj_name, &aut_num.body).await?;
+
+    let imports_json = serde_json::to_value(&aut_num.imports)?;
+    let exports_json = serde_json::to_value(&aut_num.exports)?;
+    sqlx::query!(
+        "insert into aut_num(as_num, as_name, imports, exports, rpsl_obj_name) values ($1, $2, $3, $4, $5)",
+        as_num,
+        as_name,
+        imports_json,
+        exports_json,
+        rpsl_obj_name
+    )
+    .execute(pool)
+    .await.map_err(Into::into)
+}
+
+async fn insert_observed_route(pool: &Pool<Postgres>, line: &Line) -> sqlx::Result<i32> {
+    let raw_line = &line.raw;
+    let prefix = line.compare.prefix;
+    let address_prefix = IpNetwork::new(prefix.addr(), prefix.prefix_len())
+        .expect("IpNet should be valid IpNetWork");
+
+    let observed_route_id = sqlx::query!(
+        r#"INSERT INTO observed_route(raw_line, address_prefix)
+        VALUES ($1, $2)
+        RETURNING observed_route_id"#,
+        raw_line,
+        address_prefix,
+    )
+    .fetch_one(pool)
+    .await?
+    .observed_route_id;
+
+    if let Some(reports) = &line.report {
+        for report in reports {
+            _ = insert_exchange_report(pool, report, observed_route_id).await?;
+        }
+    }
+
+    Ok(observed_route_id)
+}
+
+async fn insert_exchange_report(
+    pool: &Pool<Postgres>,
+    report: &Report,
+    observed_route_id: i32,
+) -> sqlx::Result<i32> {
+    let (from_as, to_as, import, overall_type, items) = match report {
+        Report::OkImport { from, to } => (*from as i32, *to as i32, true, "ok", None),
+        Report::OkExport { from, to } => (*from as i32, *to as i32, false, "ok", None),
+        Report::SkipImport { from, to, items } => {
+            (*from as i32, *to as i32, true, "skip", Some(items))
+        }
+        Report::SkipExport { from, to, items } => {
+            (*from as i32, *to as i32, false, "skip", Some(items))
+        }
+        Report::UnrecImport { from, to, items } => {
+            (*from as i32, *to as i32, true, "unrecorded", Some(items))
+        }
+        Report::UnrecExport { from, to, items } => {
+            (*from as i32, *to as i32, false, "unrecorded", Some(items))
+        }
+        Report::MehImport { from, to, items } => {
+            (*from as i32, *to as i32, true, "special case", Some(items))
+        }
+        Report::MehExport { from, to, items } => {
+            (*from as i32, *to as i32, false, "special case", Some(items))
+        }
+        Report::BadImport { from, to, items } => {
+            (*from as i32, *to as i32, true, "bad", Some(items))
+        }
+        Report::BadExport { from, to, items } => {
+            (*from as i32, *to as i32, false, "bad", Some(items))
+        }
+        report @ Report::AsPathPairWithSet { from: _, to: _ } => {
+            warn!("Encountered {:?}", report);
+            return Ok(-1);
+        }
+    };
+
+    let report_id = sqlx::query!(
+        r#"INSERT INTO exchange_report(from_as, to_as, import, overall_type, parent_observed_route)
+        VALUES ($1, $2, $3, $4, $5)
+        RETURNING report_id"#,
+        from_as,
+        to_as,
+        import,
+        overall_type as _,
+        observed_route_id,
+    )
+    .fetch_one(pool)
+    .await?
+    .report_id;
+
+    if let Some(items) = items {
+        for item in items {
+            insert_report_item(pool, overall_type, item, report_id).await?;
+        }
+    }
+
+    Ok(report_id)
+}
+
+async fn insert_report_item(
+    pool: &Pool<Postgres>,
+    category: &str,
+    item: &ReportItem,
+    exchange_report_id: i32,
+) -> sqlx::Result<i32> {
+    let (specific_case, str_content, num_content) = match item {
+        ReportItem::SkipAsRegexWithTilde(s) => (Some("skip_regex_tilde"), Some(s), None),
+        ReportItem::SkipAsRegexPathWithSet => (Some("skip_regex_with_set"), None, None),
+        ReportItem::SkipCommunityCheckUnimplemented(_) => (Some("skip_community"), None, None),
+        ReportItem::UnrecordedAutNum(num) => (Some("unrec_aut_num"), None, Some(*num as i32)),
+        ReportItem::UnrecImportEmpty => (Some("unrec_import_empty"), None, None),
+        ReportItem::UnrecExportEmpty => (Some("unrec_export_empty"), None, None),
+        ReportItem::UnrecordedAsSet(s) => (Some("unrec_as_set"), Some(s), None),
+        ReportItem::UnrecordedAsRoutes(num) => (Some("unrec_as_routes"), None, Some(*num as i32)),
+        ReportItem::UnrecordedAsSetRoute(s) => (Some("unrec_as_set_route"), Some(s), None),
+        ReportItem::UnrecordedSomeAsSetRoute(s) => (Some("unrec_some_as_set_route"), Some(s), None),
+        ReportItem::UnrecordedRouteSet(s) => (Some("unrec_route_set"), Some(s), None),
+        ReportItem::UnrecordedPeeringSet(s) => (Some("unrec_peering_set"), Some(s), None),
+        ReportItem::UnrecordedFilterSet(s) => (Some("unrec_filter_set"), Some(s), None),
+        ReportItem::SpecAsIsOriginButNoRoute(num) => (
+            Some("spec_as_is_origin_but_no_route"),
+            None,
+            Some(*num as i32),
+        ),
+        ReportItem::SpecAsSetContainsOriginButNoRoute(s, num) => (
+            Some("spec_as_set_contains_origin_but_no_route"),
+            Some(s),
+            Some(*num as i32),
+        ),
+        ReportItem::SpecExportCustomers => (Some("spec_export_customers"), None, None),
+        ReportItem::SpecImportFromNeighbor => (Some("spec_import_from_neighbor"), None, None),
+        ReportItem::SpecTier1Pair => (Some("spec_tier1_pair"), None, None),
+        ReportItem::SpecImportPeerOIFPS => (Some("spec_import_peer_oifps"), None, None),
+        ReportItem::SpecImportCustomerOIFPS => (Some("spec_import_customer_oifps"), None, None),
+        ReportItem::SpecUphillTier1 => (Some("spec_uphill_tier1"), None, None),
+        ReportItem::SpecUphill => (Some("spec_uphill"), None, None),
+        ReportItem::MatchFilter => (Some("err_filter"), None, None),
+        ReportItem::MatchFilterAsNum(num, _) => {
+            (Some("err_filter_as_num"), None, Some(*num as i32))
+        }
+        ReportItem::MatchFilterAsSet(s, _) => (Some("err_filter_as_set"), Some(s), None),
+        ReportItem::MatchFilterPrefixes => (Some("err_filter_prefixes"), None, None),
+        ReportItem::MatchFilterRouteSet(s) => (Some("err_filter_route_set"), Some(s), None),
+        ReportItem::MatchRemoteAsNum(num) => (Some("err_remote_as_num"), None, Some(*num as i32)),
+        ReportItem::MatchRemoteAsSet(s) => (Some("err_remote_as_set"), Some(s), None),
+        ReportItem::MatchExceptPeeringRight => (Some("err_except_peering_right"), None, None),
+        ReportItem::MatchPeering => (Some("err_peering"), None, None),
+        ReportItem::MatchRegex(s) => (Some("err_regex"), Some(s), None),
+        ReportItem::RpslInvalidAsName(s) => (Some("rpsl_as_name"), Some(s), None),
+        ReportItem::RpslInvalidFilter(s) => (Some("rpsl_filter"), Some(s), None),
+        ReportItem::RpslInvalidAsRegex(s) => (Some("rpsl_regex"), Some(s), None),
+        ReportItem::RpslUnknownFilter(s) => (Some("rpsl_unknown_filter"), Some(s), None),
+        ReportItem::RecCheckFilter => (Some("recursion"), None, None),
+        ReportItem::RecFilterRouteSet(s) => (Some("recursion"), Some(s), None),
+        ReportItem::RecFilterRouteSetMember(_) => (Some("recursion"), None, None),
+        ReportItem::RecFilterAsSet(s) => (Some("recursion"), Some(s), None),
+        ReportItem::RecFilterAsName(_) => (Some("recursion"), None, None),
+        ReportItem::RecFilterAnd => (Some("recursion"), None, None),
+        ReportItem::RecFilterOr => (Some("recursion"), None, None),
+        ReportItem::RecFilterNot => (Some("recursion"), None, None),
+        ReportItem::RecCheckSetMember(s) => (Some("recursion"), Some(s), None),
+        ReportItem::RecCheckRemoteAs => (Some("recursion"), None, None),
+        ReportItem::RecRemoteAsName(_) => (Some("recursion"), None, None),
+        ReportItem::RecRemoteAsSet(s) => (Some("recursion"), Some(s), None),
+        ReportItem::RecRemotePeeringSet(s) => (Some("recursion"), Some(s), None),
+        ReportItem::RecPeeringAnd => (Some("recursion"), None, None),
+        ReportItem::RecPeeringOr => (Some("recursion"), None, None),
+        ReportItem::RecPeeringExcept => (Some("recursion"), None, None),
+    };
+
+    // Insert the report item with its corresponding details
+    let report_item_id = sqlx::query!(
+        r#"INSERT INTO report_item(category, specific_case, str_content, num_content, parent_report)
+        VALUES ($1, $2, $3, $4, $5)
+        RETURNING report_item_id"#,
+        category as _,
+        specific_case as _,
+        str_content,
+        num_content,
+        exchange_report_id
+    )
+    .fetch_one(pool)
+    .await?
+    .report_item_id;
+
+    Ok(report_item_id)
+}
+
 // TODO: provide_customer.
 // TODO: peering_set.
 // TODO: filter_set.
