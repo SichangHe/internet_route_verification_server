@@ -2,6 +2,8 @@
 use std::{env::args, fs::File, io::BufReader};
 
 use anyhow::Result;
+use encoding_rs::Encoding;
+use encoding_rs_io::DecodeReaderBytesBuilder;
 use log::{debug, error, warn};
 use route_verification::{
     bgp::{Line, Report, ReportItem},
@@ -35,7 +37,12 @@ async fn main() -> Result<()> {
 
 async fn scan_db(pool: &Pool<Postgres>) -> Result<()> {
     debug!("Opening RIPE.db.");
-    let db = BufReader::new(File::open("ripe.db")?);
+    let encoding = Encoding::for_label(b"latin1");
+    let db = BufReader::new(
+        DecodeReaderBytesBuilder::new()
+            .encoding(encoding)
+            .build(File::open("ripe.db")?),
+    );
 
     let empty = "".to_string();
     let (mut n_mntner, mut n_route_obj) = (0, 0);

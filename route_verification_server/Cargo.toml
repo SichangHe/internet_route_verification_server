@@ -7,6 +7,8 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1"
+encoding_rs = "0.8.32"
+encoding_rs_io = "0.1.7"
 env_logger = "0"
 log = "0"
 route_verification = "0.2"
