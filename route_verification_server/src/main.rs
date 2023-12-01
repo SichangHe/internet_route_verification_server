@@ -37,6 +37,7 @@ async fn scan_db(pool: &Pool<Postgres>) -> Result<()> {
     debug!("Opening RIPE.db.");
     let db = BufReader::new(File::open("ripe.db")?);
 
+    let empty = "".to_string();
     let (mut n_mntner, mut n_route_obj) = (0, 0);
     // (mut n_as_set,
     // mut n_aut_num,
@@ -63,7 +64,14 @@ async fn scan_db(pool: &Pool<Postgres>) -> Result<()> {
                 }
                 let matches = find_rpsl_object_fields(&obj.body, &["desc", "source"]);
                 let (desc_s, source_s) = (&matches[0], &matches[1]);
-                match insert_mntner_obj(pool, &obj.name, &obj.body, &desc_s[0], &source_s[0]).await
+                match insert_mntner_obj(
+                    pool,
+                    &obj.name,
+                    &obj.body,
+                    desc_s.get(0).unwrap_or(&empty),
+                    source_s.get(0).unwrap_or(&empty),
+                )
+                .await
                 {
                     Ok(_) => {
                         n_mntner += 1;
