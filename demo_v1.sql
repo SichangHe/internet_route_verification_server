@@ -145,10 +145,10 @@ create table if not exists mbrs_by_ref(
 create table if not exists route_set(
 	route_set_name text primary key references rpsl_obj
 );
-create table if not exists route_set_contains_num(
+create table if not exists route_set_contains_address_prefix(
 	route_set_name text not null references route_set,
-	as_num int not null references autonomous_system,
-	primary key (route_set_name, as_num)
+	address_prefix inet not null,
+	primary key (route_set_name, address_prefix)
 );
 create table if not exists route_set_contains_set(
 	route_set_name text not null references route_set,

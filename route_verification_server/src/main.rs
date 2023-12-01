@@ -3,7 +3,7 @@ use anyhow::Result;
 use log::warn;
 use route_verification::{
     bgp::{Line, Report, ReportItem},
-    ir::AutNum,
+    ir::{AddrPfxRange, AutNum, Filter, Peering, RouteSet, RouteSetMember},
 };
 use sqlx::{
     postgres::{PgPoolOptions, PgQueryResult},
@@ -332,9 +332,138 @@ async fn insert_report_item(
     Ok(report_item_id)
 }
 
-// TODO: provide_customer.
-// TODO: peering_set.
-// TODO: filter_set.
-// TODO: peer.
-// TODO: mbrs_by_ref.
-// TODO: route_set.
+async fn insert_provide_customer(
+    pool: &Pool<Postgres>,
+    provider: i32,
+    customer: i32,
+) -> sqlx::Result<PgQueryResult> {
+    sqlx::query!(
+        "INSERT INTO provide_customer(provider, customer) VALUES ($1, $2)",
+        provider,
+        customer
+    )
+    .execute(pool)
+    .await
+}
+
+async fn insert_peer(
+    pool: &Pool<Postgres>,
+    peer_1: i32,
+    peer_2: i32,
+) -> sqlx::Result<PgQueryResult> {
+    sqlx::query!(
+        "INSERT INTO peer(peer_1, peer_2) VALUES ($1, $2)",
+        peer_1,
+        peer_2
+    )
+    .execute(pool)
+    .await
+}
+
+async fn insert_peering_set(
+    pool: &Pool<Postgres>,
+    peering_set_name: &str,
+    peerings: &Vec<Peering>,
+) -> Result<()> {
+    sqlx::query!(
+        "INSERT INTO peering_set(peering_set_name, peerings) VALUES ($1, $2)",
+        peering_set_name,
+        serde_json::to_value(peerings)?
+    )
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+async fn insert_filter_set(
+    pool: &Pool<Postgres>,
+    filter_set_name: &str,
+    filters: &Vec<Filter>,
+) -> Result<()> {
+    sqlx::query!(
+        "INSERT INTO filter_set(filter_set_name, filters) VALUES ($1, $2)",
+        filter_set_name,
+        serde_json::to_value(filters)?
+    )
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+async fn insert_mbrs_by_ref(
+    pool: &Pool<Postgres>,
+    rpsl_obj_name: &str,
+    mntner_name: &str,
+) -> sqlx::Result<PgQueryResult> {
+    sqlx::query!(
+        "INSERT INTO mbrs_by_ref(rpsl_obj_name, mntner_name) VALUES ($1, $2)",
+        rpsl_obj_name,
+        mntner_name
+    )
+    .execute(pool)
+    .await
+}
+
+async fn insert_route_set(
+    pool: &Pool<Postgres>,
+    route_set_name: &str,
+    route_set: &RouteSet,
+) -> sqlx::Result<()> {
+    insert_rpsl_obj(pool, route_set_name, &route_set.body).await?;
+    sqlx::query!(
+        "INSERT INTO route_set(route_set_name) VALUES ($1)",
+        route_set_name
+    )
+    .execute(pool)
+    .await?;
+
+    for member in &route_set.members {
+        match member {
+            RouteSetMember::RSRange(addr_pfx_range) => {
+                insert_route_set_contains_address_prefix(pool, route_set_name, addr_pfx_range)
+                    .await?;
+            }
+            RouteSetMember::NameOp(contained_set_name, _) => {
+                insert_route_set_contains_set(pool, route_set_name, contained_set_name).await?;
+            }
+        }
+    }
+
+    Ok(())
+}
+
+async fn insert_route_set_contains_address_prefix(
+    pool: &Pool<Postgres>,
+    route_set_name: &str,
+    addr_pfx_range: &AddrPfxRange,
+) -> sqlx::Result<()> {
+    let prefix = &addr_pfx_range.address_prefix;
+    let address_prefix: IpNetwork = IpNetwork::new(prefix.addr(), prefix.prefix_len())
+        .expect("IpNet should be valid IpNetWork");
+
+    sqlx::query!(
+        "INSERT INTO route_set_contains_address_prefix(route_set_name, address_prefix) VALUES ($1, $2)",
+        route_set_name,
+        address_prefix
+    )
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
+async fn insert_route_set_contains_set(
+    pool: &Pool<Postgres>,
+    route_set_name: &str,
+    contained_set_name: &str,
+) -> sqlx::Result<()> {
+    sqlx::query!(
+        "INSERT INTO route_set_contains_set(route_set_name, contained_set) VALUES ($1, $2)",
+        route_set_name,
+        contained_set_name
+    )
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
