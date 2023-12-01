@@ -69,6 +69,7 @@ async fn scan_db(pool: &Pool<Postgres>) -> Result<()> {
                 if n_mntner > ENOUGH {
                     continue;
                 }
+                debug!("Inserting mntner {}", obj.name);
                 let matches = find_rpsl_object_fields(&obj.body, &["desc", "source"]);
                 let (desc_s, source_s) = (&matches[0], &matches[1]);
                 match insert_mntner_obj(
@@ -94,8 +95,9 @@ async fn scan_db(pool: &Pool<Postgres>) -> Result<()> {
                 if n_route_obj > ENOUGH {
                     continue;
                 }
+                debug!("Inserting route object {}", obj.name);
                 let matches = find_rpsl_object_fields(&obj.body, &["origin"]);
-                let origin = if let Ok(o) = matches[0][0].parse() {
+                let origin = if let Ok(o) = matches[0][0][2..].parse() {
                     o
                 } else {
                     warn!(
@@ -145,16 +147,17 @@ async fn insert_route_obj(
     address_prefix: &str,
     body: &str,
     origin: i32,
-) -> sqlx::Result<PgQueryResult> {
+) -> Result<()> {
     insert_rpsl_obj(pool, address_prefix, body).await?;
     sqlx::query!(
         "insert into route_obj(address_prefix, origin, rpsl_obj_name) values ($1, $2, $3)",
-        address_prefix as _,
+        address_prefix.parse::<IpNetwork>()?,
         origin,
         address_prefix
     )
     .execute(pool)
-    .await
+    .await?;
+    Ok(())
 }
 
 async fn insert_as_set(
