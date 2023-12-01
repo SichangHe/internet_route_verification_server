@@ -1,9 +1,12 @@
-/// Launch Postgres and create `irv_server_test` before developing this.
+//! Launch Postgres and create `irv_server_test` before developing this.
+use std::{env::args, fs::File, io::BufReader};
+
 use anyhow::Result;
-use log::warn;
+use log::{debug, error, warn};
 use route_verification::{
     bgp::{Line, Report, ReportItem},
     ir::{AddrPfxRange, AutNum, Filter, Peering, RouteSet, RouteSetMember},
+    lex::{expressions, io_wrapper_lines, lines_continued, rpsl_objects, RpslExpr},
 };
 use sqlx::{
     postgres::{PgPoolOptions, PgQueryResult},
@@ -11,20 +14,95 @@ use sqlx::{
     Pool, Postgres,
 };
 
+const ONE_MEBIBYTE: usize = 1024 * 1024;
+const ENOUGH: usize = 1000;
+
 #[tokio::main]
-async fn main() -> sqlx::Result<()> {
+async fn main() -> Result<()> {
     env_logger::init();
     let pool = PgPoolOptions::new()
-        .max_connections(5)
         .connect("postgres://postgres:postgres@localhost/irv_server_test")
         .await?;
 
-    const BLAH: &str = "blah";
-    let row = sqlx::query!("SELECT $1 as str", BLAH)
-        .fetch_one(&pool)
-        .await?;
+    let args: Vec<String> = args().collect();
+    match args[1].as_str() {
+        "scan" => scan_db(&pool).await?,
+        other => error!("Unknown command `{}`", other),
+    }
 
-    assert_eq!(row.str, Some(BLAH.to_owned()));
+    Ok(())
+}
+
+async fn scan_db(pool: &Pool<Postgres>) -> Result<()> {
+    debug!("Opening RIPE.db.");
+    let db = BufReader::new(File::open("ripe.db")?);
+
+    let (mut n_mntner, mut n_route_obj) = (0, 0);
+    // (mut n_as_set,
+    // mut n_aut_num,
+    // mut n_peering_set,
+    // mut n_filter_set,
+    // mut n_route_set)= (0, 0, 0, 0, 0, 0, 0);
+
+    debug!("Checking through objects.");
+    for obj in rpsl_objects(io_wrapper_lines(db)) {
+        if obj.body.len() > ONE_MEBIBYTE {
+            warn!(
+                "Skipping {} object `{}` with a {}MiB body.",
+                obj.class,
+                obj.name,
+                obj.body.len() / ONE_MEBIBYTE
+            );
+            continue;
+        }
+
+        match obj.class.as_str() {
+            "mntner" => {
+                if n_mntner > ENOUGH {
+                    continue;
+                }
+                let matches = find_rpsl_object_fields(&obj.body, &["desc", "source"]);
+                let (desc_s, source_s) = (&matches[0], &matches[1]);
+                match insert_mntner_obj(pool, &obj.name, &obj.body, &desc_s[0], &source_s[0]).await
+                {
+                    Ok(_) => {
+                        n_mntner += 1;
+                        if n_mntner > ENOUGH && n_route_obj > ENOUGH {
+                            break;
+                        }
+                    }
+
+                    Err(_) => error!("Failed to insert mntner {}", &obj.name),
+                }
+            }
+            "route" | "route6" => {
+                if n_route_obj > ENOUGH {
+                    continue;
+                }
+                let matches = find_rpsl_object_fields(&obj.body, &["origin"]);
+                let origin = if let Ok(o) = matches[0][0].parse() {
+                    o
+                } else {
+                    warn!(
+                        "Failed to parse origin {} of route object {}",
+                        &matches[0][0], obj.name
+                    );
+                    continue;
+                };
+                match insert_route_obj(pool, &obj.name, &obj.body, origin).await {
+                    Ok(_) => {
+                        n_route_obj += 1;
+                        if n_mntner > ENOUGH && n_route_obj > ENOUGH {
+                            break;
+                        }
+                    }
+                    Err(_) => error!("Failed to insert route object {}", &obj.name),
+                }
+            }
+            _ => (),
+        }
+    }
+    debug!("Inserted enough mntner and route objects.");
 
     Ok(())
 }
@@ -49,17 +127,16 @@ async fn insert_mntner_obj(
 
 async fn insert_route_obj(
     pool: &Pool<Postgres>,
-    rpsl_obj_name: &str,
-    body: &str,
     address_prefix: &str,
+    body: &str,
     origin: i32,
 ) -> sqlx::Result<PgQueryResult> {
-    insert_rpsl_obj(pool, rpsl_obj_name, body).await?;
+    insert_rpsl_obj(pool, address_prefix, body).await?;
     sqlx::query!(
         "insert into route_obj(address_prefix, origin, rpsl_obj_name) values ($1, $2, $3)",
         address_prefix as _,
         origin,
-        rpsl_obj_name
+        address_prefix
     )
     .execute(pool)
     .await
@@ -123,14 +200,20 @@ async fn insert_rpsl_obj(
     pool: &Pool<Postgres>,
     rpsl_obj_name: &str,
     body: &str,
-) -> sqlx::Result<PgQueryResult> {
+) -> sqlx::Result<()> {
     sqlx::query!(
         "insert into rpsl_obj(rpsl_obj_name, body) values ($1, $2)",
         rpsl_obj_name,
         body
     )
     .execute(pool)
-    .await
+    .await?;
+
+    let mnt_bys = &find_rpsl_object_fields(body, &["mnt-by"])[0];
+    for mnt_by in mnt_bys {
+        insert_rpsl_obj_mnt_by(pool, rpsl_obj_name, mnt_by).await?;
+    }
+    Ok(())
 }
 
 async fn insert_aut_num(
@@ -466,4 +549,17 @@ async fn insert_route_set_contains_set(
     .await?;
 
     Ok(())
+}
+
+fn find_rpsl_object_fields(body: &str, fields: &[&str]) -> Vec<Vec<String>> {
+    let mut matches = vec![vec![]; fields.len()];
+    for RpslExpr { key, expr } in expressions(lines_continued(body.lines())) {
+        for (index, field) in fields.iter().enumerate() {
+            if key == *field {
+                matches[index].push(expr);
+                break;
+            }
+        }
+    }
+    matches
 }
