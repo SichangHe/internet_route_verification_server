@@ -1,0 +1,50 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<style>
+    body {
+        font-family: 'Arial', sans-serif;
+        line-height: 1.6;
+        margin: 20px;
+    }
+
+    h1, h2 {
+        color: #333;
+    }
+
+    p {
+        color: #555;
+    }
+
+    ul {
+        list-style-type: square;
+        margin-left: 20px;
+        color: #777;
+    }
+</style>
+
+    <h1>{% block title %} Routing Policy Verification API {% endblock %}</h1>
+    <h2>Objectives</h2>
+    <p>
+        In the end, users can query RPSL, routes, reports, and specific report items for a given AS, vice versa for specific use.
+        For example, query for the reports related to a specific AS; query for the ASes that have a specific type of report item;
+        and query for routes related to a specific maintainer.
+    </p>
+
+    <h2>Project Description</h2>
+    <p>
+        A REST API server for network operators to query routing policies and the verification reports for observed routes against these policies.
+        The goal is to help operators verify the policies they publish and diagnose inconsistencies between policies and routes.
+    </p>
+
+    <p>
+        Routing policies are retrieved from the Routing Policy Specification Language (RPSL) in the Internet Route Registry (IRR).
+        Specified with the RPSL, each Autonomous System (AS) has its policies to accept or reject routes when importing or exporting them.
+        Our service records these policies.
+    </p>
+
+    <p>We use Internet Route Verification to generate the reports.</p>
+{% endblock %}
+
+
+

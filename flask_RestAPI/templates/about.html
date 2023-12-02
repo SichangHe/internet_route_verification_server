@@ -1,0 +1,41 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<style>
+    body {
+        font-family: 'Arial', sans-serif;
+        line-height: 1.6;
+        margin: 20px;
+    }
+
+    h1, h2 {
+        color: #333;
+    }
+
+    p {
+        color: #555;
+    }
+
+    ul {
+        list-style-type: square;
+        margin-left: 20px;
+        color: #777;
+    }
+</style>
+
+    <h1>{% block title %} Group member introduction {% endblock %}</h1>
+    <h2>Member1-Shouju Wang</h2>
+    <p>
+        ********
+    </p>
+
+    <h2>Member2-Steven He</h2>
+    <p>
+        *******
+    </p>
+
+
+{% endblock %}
+
+
+
