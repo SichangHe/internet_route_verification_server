@@ -6,6 +6,7 @@ use encoding_rs::Encoding;
 use encoding_rs_io::DecodeReaderBytesBuilder;
 use log::{debug, error, warn};
 use route_verification::{
+    as_rel::{AsRelDb, Relationship},
     bgp::{Line, Report, ReportItem},
     ir::{AddrPfxRange, AutNum, FilterSet, Ir, PeeringSet, RouteSet, RouteSetMember},
     lex::{expressions, io_wrapper_lines, lines_continued, rpsl_objects, RpslExpr},
@@ -30,7 +31,59 @@ async fn main() -> Result<()> {
     match args[1].as_str() {
         "scan" => scan_db(&pool).await?,
         "load" => load_parsed(&pool).await?,
+        "asrel" => as_relationship_db(&pool).await?,
         other => error!("Unknown command `{}`", other),
+    }
+
+    Ok(())
+}
+
+async fn as_relationship_db(pool: &Pool<Postgres>) -> Result<()> {
+    let (mut n_provide_customer, mut n_peer) = (0, 0);
+    let db = AsRelDb::load_bz("20230701.as-rel.bz2")?;
+
+    for ((from, to), relationship) in &db.source2dest {
+        match (from, to, relationship) {
+            (provider, customer, Relationship::P2C) | (customer, provider, Relationship::C2P) => {
+                if n_provide_customer > ENOUGH {
+                    continue;
+                }
+                debug!(
+                    "Inserting provider-customer relationship {} -> {}",
+                    from, to
+                );
+                match insert_provide_customer(pool, *provider as i32, *customer as i32).await {
+                    Ok(_) => {
+                        n_provide_customer += 1;
+                        if n_provide_customer > ENOUGH && n_peer > ENOUGH {
+                            break;
+                        }
+                    }
+                    Err(why) => error!(
+                        "Failed to insert provider-customer relationship {} -> {}: {:?}",
+                        from, to, why
+                    ),
+                }
+            }
+            (peer1, peer2, Relationship::P2P) => {
+                if n_peer > ENOUGH {
+                    continue;
+                }
+                debug!("Inserting peer relationship {} -> {}", from, to);
+                match insert_peer(pool, *peer1 as i32, *peer2 as i32).await {
+                    Ok(_) => {
+                        n_peer += 1;
+                        if n_provide_customer > ENOUGH && n_peer > ENOUGH {
+                            break;
+                        }
+                    }
+                    Err(why) => error!(
+                        "Failed to insert peer relationship {} -> {}: {:?}",
+                        from, to, why
+                    ),
+                }
+            }
+        }
     }
 
     Ok(())

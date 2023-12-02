@@ -11,6 +11,7 @@
 **.tmp
 
 # Databases
+**.bz2
 **.db*
 **.json
 **.sqlite*
