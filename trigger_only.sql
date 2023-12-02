@@ -157,8 +157,8 @@ EXECUTE FUNCTION check_prdcst_before_insert_autosys();
 CREATE OR REPLACE FUNCTION check_aut_num_before_insert_autosys()
 RETURNS TRIGGER AS $$
 BEGIN
-  IF NOT EXISTS (SELECT 1 FROM autonomous_system WHERE as_num = NEW.as_num) THEN
-    INSERT INTO autonomous_system (as_num) VALUES (NEW.as_num);
+  IF NOT EXISTS (SELECT 1 FROM autonomous_system WHERE as_num = NEW.origin) THEN
+    INSERT INTO autonomous_system (as_num) VALUES (NEW.origin);
   END IF;
   RETURN NEW;
 END;
@@ -205,20 +205,3 @@ CREATE TRIGGER trigger_before_insert_as_set_contains_num
 BEFORE INSERT ON as_set_contains_num
 FOR EACH ROW
 EXECUTE FUNCTION check_ascnum_before_insert_autosys();
-
---*****************************************************************
-CREATE OR REPLACE FUNCTION check_rscnum_before_insert_autosys()
-RETURNS TRIGGER AS $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM autonomous_system WHERE as_num = NEW.as_num) THEN
-    INSERT INTO autonomous_system (as_num) VALUES (NEW.as_num);
-  END IF;
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE TRIGGER trigger_before_insert_route_set_contains_num
-BEFORE INSERT ON route_set_contains_num
-FOR EACH ROW
-EXECUTE FUNCTION check_rscnum_before_insert_autosys();
-

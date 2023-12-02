@@ -4,14 +4,18 @@
 
 Create a new PostgreSQL database `irv_server_test` and source the schema files at `./`:
 
+For example, in `psql -h localhost`:
+
 ```sql
+create database irv_server_test;
+\c irv_server_test;
 \i demo_v1.sql
 \i trigger_only.sql
 ```
 
 ### Insertion to the database
 
-This section should be done at `route_verification_server/`.
+This section should be done at `route_verification_server/`. You can do the following in parallel.
 
 Move in `ripe.db` and run this to scan for maintainer objects and route objects.
 
@@ -33,7 +37,7 @@ cargo r --release -- asrel
 ```
 
 Make sure you have `bgpdump` installed.
-Move in the MRT file `rib.20230619.2200.bz2`, generate report on them, and load the reports.
+Move in the MRT file `rib.20230619.2200.bz2`, generate 256 report on them, and load the reports into the database.
 
 ```sh
 cargo r --release -- record
