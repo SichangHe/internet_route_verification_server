@@ -22,8 +22,15 @@
         color: #777;
     }
 </style>
-    <h1>AS Information</h1>
-    <p>AS Set Name: {{ as_set_name }}</p>
+<body>
+    <h1>Query Result</h1>
+    <!-- Display the results based on the user's query -->
+    <ul>
+        {% for result in results %}
+            <li>{{ result }}</li>
+        {% endfor %}
+    </ul>
+</body>
 {% endblock %}
 
 
