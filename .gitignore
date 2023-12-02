@@ -12,6 +12,7 @@
 
 # Databases
 **.db*
+**.json
 **.sqlite*
 
 # Documents

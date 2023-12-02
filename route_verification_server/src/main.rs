@@ -7,7 +7,7 @@ use encoding_rs_io::DecodeReaderBytesBuilder;
 use log::{debug, error, warn};
 use route_verification::{
     bgp::{Line, Report, ReportItem},
-    ir::{AddrPfxRange, AutNum, Filter, Peering, RouteSet, RouteSetMember},
+    ir::{AddrPfxRange, AutNum, FilterSet, Ir, PeeringSet, RouteSet, RouteSetMember},
     lex::{expressions, io_wrapper_lines, lines_continued, rpsl_objects, RpslExpr},
 };
 use sqlx::{
@@ -29,7 +29,102 @@ async fn main() -> Result<()> {
     let args: Vec<String> = args().collect();
     match args[1].as_str() {
         "scan" => scan_db(&pool).await?,
+        "load" => load_parsed(&pool).await?,
         other => error!("Unknown command `{}`", other),
+    }
+
+    Ok(())
+}
+
+async fn load_parsed(pool: &Pool<Postgres>) -> Result<()> {
+    let empty = "".to_string();
+    let (mut n_as_set, mut n_aut_num, mut n_peering_set, mut n_filter_set, mut n_route_set) =
+        (0, 0, 0, 0, 0);
+    let Ir {
+        aut_nums,
+        as_sets,
+        route_sets,
+        peering_sets,
+        filter_sets,
+        as_routes: _,
+    } = Ir::pal_read("parsed_all")?;
+
+    for (num, aut_num) in aut_nums {
+        debug!("Inserting aut-num {}", num);
+        let rpsl_object_name = format!("AS{}", num);
+        let as_num = num as i32;
+        let as_names = &find_rpsl_object_fields(&aut_num.body, &["as-name"])[0];
+        let as_name = as_names.get(0).unwrap_or(&empty);
+        match insert_aut_num(pool, &rpsl_object_name, as_num, as_name, &aut_num).await {
+            Ok(_) => {
+                n_aut_num += 1;
+                if n_aut_num > ENOUGH {
+                    break;
+                }
+            }
+            Err(why) => error!("Failed to insert aut-num {}: {:?}", num, why),
+        }
+    }
+
+    for (name, as_set) in as_sets {
+        debug!("Inserting as-set {}", name);
+        match insert_as_set(
+            pool,
+            &name,
+            &as_set.body,
+            as_set.is_any,
+            &as_set.members,
+            &as_set.set_members,
+        )
+        .await
+        {
+            Ok(_) => {
+                n_as_set += 1;
+                if n_as_set > ENOUGH {
+                    break;
+                }
+            }
+            Err(why) => error!("Failed to insert as-set {}: {:?}", name, why),
+        }
+    }
+
+    for (name, route_set) in route_sets {
+        debug!("Inserting route-set {}", name);
+        match insert_route_set(pool, &name, &route_set).await {
+            Ok(_) => {
+                n_route_set += 1;
+                if n_route_set > ENOUGH {
+                    break;
+                }
+            }
+            Err(why) => error!("Failed to insert route-set {}: {:?}", name, why),
+        }
+    }
+
+    for (name, peering_set) in peering_sets {
+        debug!("Inserting peering-set {}", name);
+        match insert_peering_set(pool, &name, &peering_set).await {
+            Ok(_) => {
+                n_peering_set += 1;
+                if n_peering_set > ENOUGH {
+                    break;
+                }
+            }
+            Err(why) => error!("Failed to insert peering-set {}: {:?}", name, why),
+        }
+    }
+
+    for (name, filter_set) in filter_sets {
+        debug!("Inserting filter-set {}", name);
+        match insert_filter_set(pool, &name, &filter_set).await {
+            Ok(_) => {
+                n_filter_set += 1;
+                if n_filter_set > ENOUGH {
+                    break;
+                }
+            }
+            Err(why) => error!("Failed to insert filter-set {}: {:?}", name, why),
+        }
     }
 
     Ok(())
@@ -46,11 +141,6 @@ async fn scan_db(pool: &Pool<Postgres>) -> Result<()> {
 
     let empty = "".to_string();
     let (mut n_mntner, mut n_route_obj) = (0, 0);
-    // (mut n_as_set,
-    // mut n_aut_num,
-    // mut n_peering_set,
-    // mut n_filter_set,
-    // mut n_route_set)= (0, 0, 0, 0, 0, 0, 0);
 
     debug!("Checking through objects.");
     for obj in rpsl_objects(io_wrapper_lines(db)) {
@@ -88,7 +178,7 @@ async fn scan_db(pool: &Pool<Postgres>) -> Result<()> {
                         }
                     }
 
-                    Err(_) => error!("Failed to insert mntner {}", &obj.name),
+                    Err(why) => error!("Failed to insert mntner {}: {:?}", &obj.name, why),
                 }
             }
             "route" | "route6" => {
@@ -113,7 +203,7 @@ async fn scan_db(pool: &Pool<Postgres>) -> Result<()> {
                             break;
                         }
                     }
-                    Err(_) => error!("Failed to insert route object {}", &obj.name),
+                    Err(why) => error!("Failed to insert route object {}: {:?}", &obj.name, why),
                 }
             }
             _ => (),
@@ -165,8 +255,8 @@ async fn insert_as_set(
     as_set_name: &str,
     body: &str,
     is_any: bool,
-    num_members: &[i32],
-    set_members: &[&str],
+    num_members: &[u32],
+    set_members: &[String],
 ) -> sqlx::Result<()> {
     insert_rpsl_obj(pool, as_set_name, body).await?;
     sqlx::query!(
@@ -181,7 +271,7 @@ async fn insert_as_set(
         sqlx::query!(
             "insert into as_set_contains_num(as_set_name, as_num) values ($1, $2)",
             as_set_name,
-            num
+            *num as i32
         )
         .execute(pool)
         .await?;
@@ -195,6 +285,10 @@ async fn insert_as_set(
         )
         .execute(pool)
         .await?;
+    }
+
+    for mbrs_by_ref in &find_rpsl_object_fields(body, &["mbrs-by-ref"])[0] {
+        insert_mbrs_by_ref(pool, as_set_name, mbrs_by_ref).await?;
     }
 
     Ok(())
@@ -464,12 +558,13 @@ async fn insert_peer(
 async fn insert_peering_set(
     pool: &Pool<Postgres>,
     peering_set_name: &str,
-    peerings: &Vec<Peering>,
+    peering_set: &PeeringSet,
 ) -> Result<()> {
+    insert_rpsl_obj(pool, peering_set_name, &peering_set.body).await?;
     sqlx::query!(
         "INSERT INTO peering_set(peering_set_name, peerings) VALUES ($1, $2)",
         peering_set_name,
-        serde_json::to_value(peerings)?
+        serde_json::to_value(&peering_set.peerings)?
     )
     .execute(pool)
     .await?;
@@ -479,12 +574,13 @@ async fn insert_peering_set(
 async fn insert_filter_set(
     pool: &Pool<Postgres>,
     filter_set_name: &str,
-    filters: &Vec<Filter>,
+    filter_set: &FilterSet,
 ) -> Result<()> {
+    insert_rpsl_obj(pool, filter_set_name, &filter_set.body).await?;
     sqlx::query!(
         "INSERT INTO filter_set(filter_set_name, filters) VALUES ($1, $2)",
         filter_set_name,
-        serde_json::to_value(filters)?
+        serde_json::to_value(&filter_set.filters)?
     )
     .execute(pool)
     .await?;
@@ -528,6 +624,10 @@ async fn insert_route_set(
                 insert_route_set_contains_set(pool, route_set_name, contained_set_name).await?;
             }
         }
+    }
+
+    for mbrs_by_ref in &find_rpsl_object_fields(&route_set.body, &["mbrs-by-ref"])[0] {
+        insert_mbrs_by_ref(pool, route_set_name, mbrs_by_ref).await?;
     }
 
     Ok(())

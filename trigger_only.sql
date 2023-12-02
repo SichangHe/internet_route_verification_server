@@ -157,8 +157,8 @@ EXECUTE FUNCTION check_prdcst_before_insert_autosys();
 CREATE OR REPLACE FUNCTION check_aut_num_before_insert_autosys()
 RETURNS TRIGGER AS $$
 BEGIN
-  IF NOT EXISTS (SELECT 1 FROM autonomous_system WHERE as_num = NEW.origin) THEN
-    INSERT INTO autonomous_system (as_num) VALUES (NEW.origin);
+  IF NOT EXISTS (SELECT 1 FROM autonomous_system WHERE as_num = NEW.as_num) THEN
+    INSERT INTO autonomous_system (as_num) VALUES (NEW.as_num);
   END IF;
   RETURN NEW;
 END;
