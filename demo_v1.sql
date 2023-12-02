@@ -3,7 +3,7 @@ create type overall_report_type as enum(
 	'ok',
 	'skip',
 	'unrecorded',
-	'special case',
+	'special_case',
 	'bad'
 );
 create type report_item_type as enum (

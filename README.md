@@ -26,8 +26,15 @@ The JSON files can be generated following [instructions in internet_route_verifi
 cargo r --release -- load
 ```
 
-Move in the AS Relationship Dataset file to `20230701.as-rel.bz2` and load them.
+Move in the AS Relationship Dataset file `20230701.as-rel.bz2` and load them.
 
 ```sh
 cargo r --release -- asrel
+```
+
+Make sure you have `bgpdump` installed.
+Move in the MRT file `rib.20230619.2200.bz2`, generate report on them, and load the reports.
+
+```sh
+cargo r --release -- record
 ```

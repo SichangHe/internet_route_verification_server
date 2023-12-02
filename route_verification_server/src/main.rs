@@ -7,7 +7,7 @@ use encoding_rs_io::DecodeReaderBytesBuilder;
 use log::{debug, error, warn};
 use route_verification::{
     as_rel::{AsRelDb, Relationship},
-    bgp::{Line, Report, ReportItem},
+    bgp::{parse_mrt, Line, QueryIr, Report, ReportItem, Verbosity},
     ir::{AddrPfxRange, AutNum, FilterSet, Ir, PeeringSet, RouteSet, RouteSetMember},
     lex::{expressions, io_wrapper_lines, lines_continued, rpsl_objects, RpslExpr},
 };
@@ -32,7 +32,35 @@ async fn main() -> Result<()> {
         "scan" => scan_db(&pool).await?,
         "load" => load_parsed(&pool).await?,
         "asrel" => as_relationship_db(&pool).await?,
+        "record" => record_reports(&pool).await?,
         other => error!("Unknown command `{}`", other),
+    }
+
+    Ok(())
+}
+
+async fn record_reports(pool: &Pool<Postgres>) -> Result<()> {
+    let mut n_observed_route = 0;
+    debug!("Loading IR.");
+    let db = AsRelDb::load_bz("20230701.as-rel.bz2")?;
+    let parsed = Ir::pal_read("parsed_all")?;
+    let query = QueryIr::from_ir_and_as_relationship(parsed, &db);
+
+    debug!("Loading the MRT file.");
+    let bgp_lines = parse_mrt("rib.20230619.2200.bz2")?;
+
+    for mut line in bgp_lines {
+        line.compare.verbosity = Verbosity::all_stats();
+        line.check(&query);
+        match insert_observed_route(pool, &line).await {
+            Ok(_) => {
+                n_observed_route += 1;
+                if n_observed_route > ENOUGH {
+                    break;
+                }
+            }
+            Err(why) => error!("Failed to insert observed route {:?}: {:?}", line, why),
+        }
     }
 
     Ok(())
@@ -436,32 +464,68 @@ async fn insert_exchange_report(
     observed_route_id: i32,
 ) -> sqlx::Result<i32> {
     let (from_as, to_as, import, overall_type, items) = match report {
-        Report::OkImport { from, to } => (*from as i32, *to as i32, true, "ok", None),
-        Report::OkExport { from, to } => (*from as i32, *to as i32, false, "ok", None),
-        Report::SkipImport { from, to, items } => {
-            (*from as i32, *to as i32, true, "skip", Some(items))
+        Report::OkImport { from, to } => {
+            (*from as i32, *to as i32, true, OverallReportType::Ok, None)
         }
-        Report::SkipExport { from, to, items } => {
-            (*from as i32, *to as i32, false, "skip", Some(items))
+        Report::OkExport { from, to } => {
+            (*from as i32, *to as i32, false, OverallReportType::Ok, None)
         }
-        Report::UnrecImport { from, to, items } => {
-            (*from as i32, *to as i32, true, "unrecorded", Some(items))
-        }
-        Report::UnrecExport { from, to, items } => {
-            (*from as i32, *to as i32, false, "unrecorded", Some(items))
-        }
-        Report::MehImport { from, to, items } => {
-            (*from as i32, *to as i32, true, "special case", Some(items))
-        }
-        Report::MehExport { from, to, items } => {
-            (*from as i32, *to as i32, false, "special case", Some(items))
-        }
-        Report::BadImport { from, to, items } => {
-            (*from as i32, *to as i32, true, "bad", Some(items))
-        }
-        Report::BadExport { from, to, items } => {
-            (*from as i32, *to as i32, false, "bad", Some(items))
-        }
+        Report::SkipImport { from, to, items } => (
+            *from as i32,
+            *to as i32,
+            true,
+            OverallReportType::Skip,
+            Some(items),
+        ),
+        Report::SkipExport { from, to, items } => (
+            *from as i32,
+            *to as i32,
+            false,
+            OverallReportType::Skip,
+            Some(items),
+        ),
+        Report::UnrecImport { from, to, items } => (
+            *from as i32,
+            *to as i32,
+            true,
+            OverallReportType::Unrecorded,
+            Some(items),
+        ),
+        Report::UnrecExport { from, to, items } => (
+            *from as i32,
+            *to as i32,
+            false,
+            OverallReportType::Unrecorded,
+            Some(items),
+        ),
+        Report::MehImport { from, to, items } => (
+            *from as i32,
+            *to as i32,
+            true,
+            OverallReportType::SpecialCase,
+            Some(items),
+        ),
+        Report::MehExport { from, to, items } => (
+            *from as i32,
+            *to as i32,
+            false,
+            OverallReportType::SpecialCase,
+            Some(items),
+        ),
+        Report::BadImport { from, to, items } => (
+            *from as i32,
+            *to as i32,
+            true,
+            OverallReportType::Bad,
+            Some(items),
+        ),
+        Report::BadExport { from, to, items } => (
+            *from as i32,
+            *to as i32,
+            false,
+            OverallReportType::Bad,
+            Some(items),
+        ),
         report @ Report::AsPathPairWithSet { from: _, to: _ } => {
             warn!("Encountered {:?}", report);
             return Ok(-1);
@@ -493,73 +557,83 @@ async fn insert_exchange_report(
 
 async fn insert_report_item(
     pool: &Pool<Postgres>,
-    category: &str,
+    category: OverallReportType,
     item: &ReportItem,
     exchange_report_id: i32,
 ) -> sqlx::Result<i32> {
     let (specific_case, str_content, num_content) = match item {
-        ReportItem::SkipAsRegexWithTilde(s) => (Some("skip_regex_tilde"), Some(s), None),
-        ReportItem::SkipAsRegexPathWithSet => (Some("skip_regex_with_set"), None, None),
-        ReportItem::SkipCommunityCheckUnimplemented(_) => (Some("skip_community"), None, None),
-        ReportItem::UnrecordedAutNum(num) => (Some("unrec_aut_num"), None, Some(*num as i32)),
-        ReportItem::UnrecImportEmpty => (Some("unrec_import_empty"), None, None),
-        ReportItem::UnrecExportEmpty => (Some("unrec_export_empty"), None, None),
-        ReportItem::UnrecordedAsSet(s) => (Some("unrec_as_set"), Some(s), None),
-        ReportItem::UnrecordedAsRoutes(num) => (Some("unrec_as_routes"), None, Some(*num as i32)),
-        ReportItem::UnrecordedAsSetRoute(s) => (Some("unrec_as_set_route"), Some(s), None),
-        ReportItem::UnrecordedSomeAsSetRoute(s) => (Some("unrec_some_as_set_route"), Some(s), None),
-        ReportItem::UnrecordedRouteSet(s) => (Some("unrec_route_set"), Some(s), None),
-        ReportItem::UnrecordedPeeringSet(s) => (Some("unrec_peering_set"), Some(s), None),
-        ReportItem::UnrecordedFilterSet(s) => (Some("unrec_filter_set"), Some(s), None),
+        ReportItem::SkipAsRegexWithTilde(s) => (ReportItemType::SkipRegexTilde, Some(s), None),
+        ReportItem::SkipAsRegexPathWithSet => (ReportItemType::SkipRegexWithSet, None, None),
+        ReportItem::SkipCommunityCheckUnimplemented(_) => {
+            (ReportItemType::SkipCommunity, None, None)
+        }
+        ReportItem::UnrecordedAutNum(num) => (ReportItemType::UnrecAutNum, None, Some(*num as i32)),
+        ReportItem::UnrecImportEmpty => (ReportItemType::UnrecImportEmpty, None, None),
+        ReportItem::UnrecExportEmpty => (ReportItemType::UnrecExportEmpty, None, None),
+        ReportItem::UnrecordedAsSet(s) => (ReportItemType::UnrecAsSet, Some(s), None),
+        ReportItem::UnrecordedAsRoutes(num) => {
+            (ReportItemType::UnrecAsRoutes, None, Some(*num as i32))
+        }
+        ReportItem::UnrecordedAsSetRoute(s) => (ReportItemType::UnrecAsSetRoute, Some(s), None),
+        ReportItem::UnrecordedSomeAsSetRoute(s) => {
+            (ReportItemType::UnrecSomeAsSetRoute, Some(s), None)
+        }
+        ReportItem::UnrecordedRouteSet(s) => (ReportItemType::UnrecRouteSet, Some(s), None),
+        ReportItem::UnrecordedPeeringSet(s) => (ReportItemType::UnrecPeeringSet, Some(s), None),
+        ReportItem::UnrecordedFilterSet(s) => (ReportItemType::UnrecFilterSet, Some(s), None),
         ReportItem::SpecAsIsOriginButNoRoute(num) => (
-            Some("spec_as_is_origin_but_no_route"),
+            ReportItemType::SpecAsIsOriginButNoRoute,
             None,
             Some(*num as i32),
         ),
         ReportItem::SpecAsSetContainsOriginButNoRoute(s, num) => (
-            Some("spec_as_set_contains_origin_but_no_route"),
+            ReportItemType::SpecAsSetContainsOriginButNoRoute,
             Some(s),
             Some(*num as i32),
         ),
-        ReportItem::SpecExportCustomers => (Some("spec_export_customers"), None, None),
-        ReportItem::SpecImportFromNeighbor => (Some("spec_import_from_neighbor"), None, None),
-        ReportItem::SpecTier1Pair => (Some("spec_tier1_pair"), None, None),
-        ReportItem::SpecImportPeerOIFPS => (Some("spec_import_peer_oifps"), None, None),
-        ReportItem::SpecImportCustomerOIFPS => (Some("spec_import_customer_oifps"), None, None),
-        ReportItem::SpecUphillTier1 => (Some("spec_uphill_tier1"), None, None),
-        ReportItem::SpecUphill => (Some("spec_uphill"), None, None),
-        ReportItem::MatchFilter => (Some("err_filter"), None, None),
-        ReportItem::MatchFilterAsNum(num, _) => {
-            (Some("err_filter_as_num"), None, Some(*num as i32))
+        ReportItem::SpecExportCustomers => (ReportItemType::SpecExportCustomers, None, None),
+        ReportItem::SpecImportFromNeighbor => (ReportItemType::SpecImportFromNeighbor, None, None),
+        ReportItem::SpecTier1Pair => (ReportItemType::SpecTier1Pair, None, None),
+        ReportItem::SpecImportPeerOIFPS => (ReportItemType::SpecImportPeerOIFPS, None, None),
+        ReportItem::SpecImportCustomerOIFPS => {
+            (ReportItemType::SpecImportCustomerOIFPS, None, None)
         }
-        ReportItem::MatchFilterAsSet(s, _) => (Some("err_filter_as_set"), Some(s), None),
-        ReportItem::MatchFilterPrefixes => (Some("err_filter_prefixes"), None, None),
-        ReportItem::MatchFilterRouteSet(s) => (Some("err_filter_route_set"), Some(s), None),
-        ReportItem::MatchRemoteAsNum(num) => (Some("err_remote_as_num"), None, Some(*num as i32)),
-        ReportItem::MatchRemoteAsSet(s) => (Some("err_remote_as_set"), Some(s), None),
-        ReportItem::MatchExceptPeeringRight => (Some("err_except_peering_right"), None, None),
-        ReportItem::MatchPeering => (Some("err_peering"), None, None),
-        ReportItem::MatchRegex(s) => (Some("err_regex"), Some(s), None),
-        ReportItem::RpslInvalidAsName(s) => (Some("rpsl_as_name"), Some(s), None),
-        ReportItem::RpslInvalidFilter(s) => (Some("rpsl_filter"), Some(s), None),
-        ReportItem::RpslInvalidAsRegex(s) => (Some("rpsl_regex"), Some(s), None),
-        ReportItem::RpslUnknownFilter(s) => (Some("rpsl_unknown_filter"), Some(s), None),
-        ReportItem::RecCheckFilter => (Some("recursion"), None, None),
-        ReportItem::RecFilterRouteSet(s) => (Some("recursion"), Some(s), None),
-        ReportItem::RecFilterRouteSetMember(_) => (Some("recursion"), None, None),
-        ReportItem::RecFilterAsSet(s) => (Some("recursion"), Some(s), None),
-        ReportItem::RecFilterAsName(_) => (Some("recursion"), None, None),
-        ReportItem::RecFilterAnd => (Some("recursion"), None, None),
-        ReportItem::RecFilterOr => (Some("recursion"), None, None),
-        ReportItem::RecFilterNot => (Some("recursion"), None, None),
-        ReportItem::RecCheckSetMember(s) => (Some("recursion"), Some(s), None),
-        ReportItem::RecCheckRemoteAs => (Some("recursion"), None, None),
-        ReportItem::RecRemoteAsName(_) => (Some("recursion"), None, None),
-        ReportItem::RecRemoteAsSet(s) => (Some("recursion"), Some(s), None),
-        ReportItem::RecRemotePeeringSet(s) => (Some("recursion"), Some(s), None),
-        ReportItem::RecPeeringAnd => (Some("recursion"), None, None),
-        ReportItem::RecPeeringOr => (Some("recursion"), None, None),
-        ReportItem::RecPeeringExcept => (Some("recursion"), None, None),
+        ReportItem::SpecUphillTier1 => (ReportItemType::SpecUphillTier1, None, None),
+        ReportItem::SpecUphill => (ReportItemType::SpecUphill, None, None),
+        ReportItem::MatchFilter => (ReportItemType::ErrFilter, None, None),
+        ReportItem::MatchFilterAsNum(num, _) => {
+            (ReportItemType::ErrFilterAsNum, None, Some(*num as i32))
+        }
+        ReportItem::MatchFilterAsSet(s, _) => (ReportItemType::ErrFilterAsSet, Some(s), None),
+        ReportItem::MatchFilterPrefixes => (ReportItemType::ErrFilterPrefixes, None, None),
+        ReportItem::MatchFilterRouteSet(s) => (ReportItemType::ErrFilterRouteSet, Some(s), None),
+        ReportItem::MatchRemoteAsNum(num) => {
+            (ReportItemType::ErrRemoteAsNum, None, Some(*num as i32))
+        }
+        ReportItem::MatchRemoteAsSet(s) => (ReportItemType::ErrRemoteAsSet, Some(s), None),
+        ReportItem::MatchExceptPeeringRight => (ReportItemType::ErrExceptPeeringRight, None, None),
+        ReportItem::MatchPeering => (ReportItemType::ErrPeering, None, None),
+        ReportItem::MatchRegex(s) => (ReportItemType::ErrRegex, Some(s), None),
+        ReportItem::RpslInvalidAsName(s) => (ReportItemType::RpslAsName, Some(s), None),
+        ReportItem::RpslInvalidFilter(s) => (ReportItemType::RpslFilter, Some(s), None),
+        ReportItem::RpslInvalidAsRegex(s) => (ReportItemType::RpslRegex, Some(s), None),
+        ReportItem::RpslUnknownFilter(s) => (ReportItemType::RpslUnknownFilter, Some(s), None),
+        ReportItem::RecCheckFilter => (ReportItemType::Recursion, None, None),
+        ReportItem::RecFilterRouteSet(s) => (ReportItemType::Recursion, Some(s), None),
+        ReportItem::RecFilterRouteSetMember(_) => (ReportItemType::Recursion, None, None),
+        ReportItem::RecFilterAsSet(s) => (ReportItemType::Recursion, Some(s), None),
+        ReportItem::RecFilterAsName(_) => (ReportItemType::Recursion, None, None),
+        ReportItem::RecFilterAnd => (ReportItemType::Recursion, None, None),
+        ReportItem::RecFilterOr => (ReportItemType::Recursion, None, None),
+        ReportItem::RecFilterNot => (ReportItemType::Recursion, None, None),
+        ReportItem::RecCheckSetMember(s) => (ReportItemType::Recursion, Some(s), None),
+        ReportItem::RecCheckRemoteAs => (ReportItemType::Recursion, None, None),
+        ReportItem::RecRemoteAsName(_) => (ReportItemType::Recursion, None, None),
+        ReportItem::RecRemoteAsSet(s) => (ReportItemType::Recursion, Some(s), None),
+        ReportItem::RecRemotePeeringSet(s) => (ReportItemType::Recursion, Some(s), None),
+        ReportItem::RecPeeringAnd => (ReportItemType::Recursion, None, None),
+        ReportItem::RecPeeringOr => (ReportItemType::Recursion, None, None),
+        ReportItem::RecPeeringExcept => (ReportItemType::Recursion, None, None),
     };
 
     // Insert the report item with its corresponding details
@@ -578,6 +652,58 @@ async fn insert_report_item(
     .report_item_id;
 
     Ok(report_item_id)
+}
+
+#[derive(Copy, Clone, Debug, sqlx::Type)]
+#[sqlx(type_name = "overall_report_type", rename_all = "snake_case")]
+pub enum OverallReportType {
+    Ok,
+    Skip,
+    Unrecorded,
+    SpecialCase,
+    Bad,
+}
+
+#[derive(Debug, sqlx::Type)]
+#[sqlx(type_name = "report_item_type", rename_all = "snake_case")]
+pub enum ReportItemType {
+    SkipRegexTilde,
+    SkipRegexWithSet,
+    SkipCommunity,
+    UnrecImportEmpty,
+    UnrecExportEmpty,
+    UnrecFilterSet,
+    UnrecAsRoutes,
+    UnrecRouteSet,
+    UnrecAsSet,
+    UnrecAsSetRoute,
+    UnrecSomeAsSetRoute,
+    UnrecAutNum,
+    UnrecPeeringSet,
+    SpecUphill,
+    SpecUphillTier1,
+    SpecTier1Pair,
+    SpecImportPeerOIFPS,
+    SpecImportCustomerOIFPS,
+    SpecExportCustomers,
+    SpecImportFromNeighbor,
+    SpecAsIsOriginButNoRoute,
+    SpecAsSetContainsOriginButNoRoute,
+    ErrFilter,
+    ErrFilterAsNum,
+    ErrFilterAsSet,
+    ErrFilterPrefixes,
+    ErrFilterRouteSet,
+    ErrRemoteAsNum,
+    ErrRemoteAsSet,
+    ErrExceptPeeringRight,
+    ErrPeering,
+    ErrRegex,
+    RpslAsName,
+    RpslFilter,
+    RpslRegex,
+    RpslUnknownFilter,
+    Recursion,
 }
 
 async fn insert_provide_customer(
