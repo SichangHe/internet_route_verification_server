@@ -2,6 +2,16 @@
 
 ## Setup
 
+Launch a PostgreSQL server.
+
+At `./`, move in `irv_server_dump.gz` and load it into the server:
+
+```sh
+sh restore_db.sh
+```
+
+## Setup from raw data (optional)
+
 Create a new PostgreSQL database `irv_server_test` and source the schema files at `./`:
 
 For example, in `psql -h localhost`:
@@ -17,7 +27,7 @@ create database irv_server_test;
 
 This section should be done at `route_verification_server/`. You can do the following in parallel.
 
-Move in `ripe.db` and run this to scan for maintainer objects and route objects.
+Move in `ripe.db` and run this to scan for 1000 maintainer objects and 1000 route objects.
 
 ```sh
 cargo r --release scan
