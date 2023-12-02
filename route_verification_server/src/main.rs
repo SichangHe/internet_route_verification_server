@@ -18,7 +18,6 @@ use sqlx::{
 };
 
 const ONE_MEBIBYTE: usize = 1024 * 1024;
-const ENOUGH: usize = 1000;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -55,7 +54,7 @@ async fn record_reports(pool: &Pool<Postgres>) -> Result<()> {
         match insert_observed_route(pool, &line).await {
             Ok(_) => {
                 n_observed_route += 1;
-                if n_observed_route > ENOUGH {
+                if n_observed_route > 256 {
                     break;
                 }
             }
@@ -67,26 +66,17 @@ async fn record_reports(pool: &Pool<Postgres>) -> Result<()> {
 }
 
 async fn as_relationship_db(pool: &Pool<Postgres>) -> Result<()> {
-    let (mut n_provide_customer, mut n_peer) = (0, 0);
     let db = AsRelDb::load_bz("20230701.as-rel.bz2")?;
 
     for ((from, to), relationship) in &db.source2dest {
         match (from, to, relationship) {
             (provider, customer, Relationship::P2C) | (customer, provider, Relationship::C2P) => {
-                if n_provide_customer > ENOUGH {
-                    continue;
-                }
                 debug!(
                     "Inserting provider-customer relationship {} -> {}",
                     from, to
                 );
                 match insert_provide_customer(pool, *provider as i32, *customer as i32).await {
-                    Ok(_) => {
-                        n_provide_customer += 1;
-                        if n_provide_customer > ENOUGH && n_peer > ENOUGH {
-                            break;
-                        }
-                    }
+                    Ok(_) => {}
                     Err(why) => error!(
                         "Failed to insert provider-customer relationship {} -> {}: {:?}",
                         from, to, why
@@ -94,17 +84,9 @@ async fn as_relationship_db(pool: &Pool<Postgres>) -> Result<()> {
                 }
             }
             (peer1, peer2, Relationship::P2P) => {
-                if n_peer > ENOUGH {
-                    continue;
-                }
                 debug!("Inserting peer relationship {} -> {}", from, to);
                 match insert_peer(pool, *peer1 as i32, *peer2 as i32).await {
-                    Ok(_) => {
-                        n_peer += 1;
-                        if n_provide_customer > ENOUGH && n_peer > ENOUGH {
-                            break;
-                        }
-                    }
+                    Ok(_) => {}
                     Err(why) => error!(
                         "Failed to insert peer relationship {} -> {}: {:?}",
                         from, to, why
@@ -119,8 +101,6 @@ async fn as_relationship_db(pool: &Pool<Postgres>) -> Result<()> {
 
 async fn load_parsed(pool: &Pool<Postgres>) -> Result<()> {
     let empty = "".to_string();
-    let (mut n_as_set, mut n_aut_num, mut n_peering_set, mut n_filter_set, mut n_route_set) =
-        (0, 0, 0, 0, 0);
     let Ir {
         aut_nums,
         as_sets,
@@ -137,12 +117,7 @@ async fn load_parsed(pool: &Pool<Postgres>) -> Result<()> {
         let as_names = &find_rpsl_object_fields(&aut_num.body, &["as-name"])[0];
         let as_name = as_names.get(0).unwrap_or(&empty);
         match insert_aut_num(pool, &rpsl_object_name, as_num, as_name, &aut_num).await {
-            Ok(_) => {
-                n_aut_num += 1;
-                if n_aut_num > ENOUGH {
-                    break;
-                }
-            }
+            Ok(_) => {}
             Err(why) => error!("Failed to insert aut-num {}: {:?}", num, why),
         }
     }
@@ -159,12 +134,7 @@ async fn load_parsed(pool: &Pool<Postgres>) -> Result<()> {
         )
         .await
         {
-            Ok(_) => {
-                n_as_set += 1;
-                if n_as_set > ENOUGH {
-                    break;
-                }
-            }
+            Ok(_) => {}
             Err(why) => error!("Failed to insert as-set {}: {:?}", name, why),
         }
     }
@@ -172,12 +142,7 @@ async fn load_parsed(pool: &Pool<Postgres>) -> Result<()> {
     for (name, route_set) in route_sets {
         debug!("Inserting route-set {}", name);
         match insert_route_set(pool, &name, &route_set).await {
-            Ok(_) => {
-                n_route_set += 1;
-                if n_route_set > ENOUGH {
-                    break;
-                }
-            }
+            Ok(_) => {}
             Err(why) => error!("Failed to insert route-set {}: {:?}", name, why),
         }
     }
@@ -185,12 +150,7 @@ async fn load_parsed(pool: &Pool<Postgres>) -> Result<()> {
     for (name, peering_set) in peering_sets {
         debug!("Inserting peering-set {}", name);
         match insert_peering_set(pool, &name, &peering_set).await {
-            Ok(_) => {
-                n_peering_set += 1;
-                if n_peering_set > ENOUGH {
-                    break;
-                }
-            }
+            Ok(_) => {}
             Err(why) => error!("Failed to insert peering-set {}: {:?}", name, why),
         }
     }
@@ -198,12 +158,7 @@ async fn load_parsed(pool: &Pool<Postgres>) -> Result<()> {
     for (name, filter_set) in filter_sets {
         debug!("Inserting filter-set {}", name);
         match insert_filter_set(pool, &name, &filter_set).await {
-            Ok(_) => {
-                n_filter_set += 1;
-                if n_filter_set > ENOUGH {
-                    break;
-                }
-            }
+            Ok(_) => {}
             Err(why) => error!("Failed to insert filter-set {}: {:?}", name, why),
         }
     }
@@ -212,6 +167,7 @@ async fn load_parsed(pool: &Pool<Postgres>) -> Result<()> {
 }
 
 async fn scan_db(pool: &Pool<Postgres>) -> Result<()> {
+    const ENOUGH: usize = 1000;
     debug!("Opening RIPE.db.");
     let encoding = Encoding::for_label(b"latin1");
     let db = BufReader::new(
