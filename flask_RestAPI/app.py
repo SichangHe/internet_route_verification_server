@@ -8,7 +8,6 @@ app = Flask(__name__)
 conn = psycopg.connect(f"dbname=irv_server_test")
 
 
-
 @app.route("/rpsl_obj/<string:rpsl_obj_name>", methods=["GET"])
 def get_rpsl_obj_by_name(rpsl_obj_name):
     with conn.cursor() as cur:
@@ -19,6 +18,7 @@ def get_rpsl_obj_by_name(rpsl_obj_name):
         return jsonify(entry)
     return jsonify({"message": "Entry not found"}), 404
 
+
 @app.route("/verification_reports/<int:observed_route_id>", methods=["GET"])
 def get_verification_reports(observed_route_id):
     with conn.cursor() as cur:
@@ -27,6 +27,7 @@ def get_verification_reports(observed_route_id):
             (observed_route_id,),
         ).fetchall()
     return jsonify(reports)
+
 
 @app.route("/as_info/<int:as_num>", methods=["GET"])
 def get_as_info(as_num):
@@ -39,6 +40,7 @@ def get_as_info(as_num):
         ).fetchall()
     return jsonify({"rpsl_objs": rpsl_objs, "routes": routes})
 
+
 @app.route("/overall_type/<string:overall_type>", methods=["GET"])
 def get_by_overall_type(overall_type):
     with conn.cursor() as cur:
@@ -47,30 +49,6 @@ def get_by_overall_type(overall_type):
         ).fetchall()
 
     return jsonify(reports)
-
-@app.route("/overall_type/<string:overall_type>", methods=["GET"])
-def get_by_overall_type(overall_type):
-    with conn.cursor() as cur:
-        reports = cur.execute(
-            "SELECT * FROM exchange_report WHERE overall_type = %s", (overall_type,)
-        ).fetchall()
-    return jsonify(reports)
-
-@app.route("/overall_type/<string:overall_type>", methods=["GET"])
-def get_by_overall_type(overall_type):
-    with conn.cursor() as cur:
-        reports = cur.execute(
-            "SELECT * FROM exchange_report WHERE overall_type = %s", (overall_type,)
-        ).fetchall()
-    return jsonify(reports)
-
-
-
-
-
-
-
-
 
 
 @app.route("/")
