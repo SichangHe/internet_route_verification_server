@@ -1,6 +1,7 @@
 import psycopg
 from dotenv import load_dotenv
 from flask import Flask, jsonify, render_template
+from psycopg.errors import InvalidTextRepresentation
 from psycopg.rows import dict_row
 
 OVERALL_REPORT_TYPES = ("ok", "skip", "unrecorded", "special_case", "bad")
@@ -161,6 +162,176 @@ ORDER BY as_num
                 """,
         report_item_type,
     )
+
+
+@app.route("/for_overall_report_type/<string:overall_report_type>", methods=["GET"])
+def get_for_overall_report_type(overall_report_type: str):
+    """ASes, routes, reports, and report items for the given
+    overall_report_type."""
+    if not is_valid_overall_report_type(overall_report_type):
+        return (
+            jsonify(
+                {
+                    "input_error": "Invalid overall_report_type",
+                    "possible_values": OVERALL_REPORT_TYPES,
+                }
+            ),
+            400,
+        )
+    return execute_all(
+        # TODO: Paging from user.
+        """
+WITH result_set AS (
+    SELECT
+        e.from_as AS source_as,
+        e.to_as AS destination_as,
+        e.import,
+        e.overall_type,
+        e.recorded_time AS exchange_report_time,
+        r.observed_route_id,
+        r.raw_line,
+        r.address_prefix,
+        r.recorded_time AS observed_route_time,
+        ri.category AS report_category,
+        ri.specific_case AS report_specific_case,
+        ri.str_content AS report_string_content,
+        ri.num_content AS report_numeric_content,
+        COUNT(*) OVER () AS total_items -- Total item count
+    FROM
+        exchange_report e
+    JOIN
+        observed_route r ON e.parent_observed_route = r.observed_route_id
+    LEFT JOIN
+        report_item ri ON e.report_id = ri.parent_report
+    WHERE
+        e.overall_type = %s
+    ORDER BY
+        e.recorded_time
+)
+SELECT
+    source_as,
+    destination_as,
+    import,
+    overall_type,
+    exchange_report_time,
+    observed_route_id,
+    raw_line,
+    text(address_prefix) AS address_prefix,
+    observed_route_time,
+    report_category,
+    report_specific_case,
+    report_string_content,
+    report_numeric_content,
+    total_items
+FROM
+    result_set
+OFFSET
+    0
+LIMIT
+    10
+                """,
+        overall_report_type,
+    )
+
+
+@app.route("/for_report_item_type/<string:report_item_type>", methods=["GET"])
+def get_for_report_item_type(report_item_type: str):
+    """ASes, routes, reports, and report items for the given
+    report_item_type."""
+    if not is_valid_report_item_type(report_item_type):
+        return (
+            jsonify(
+                {
+                    "input_error": "Invalid report_item_type",
+                    "possible_values": REPORT_ITEM_TYPES,
+                }
+            ),
+            400,
+        )
+    return execute_all(
+        # TODO: Paging from user.
+        """
+SELECT
+    e.from_as AS source_as,
+    e.to_as AS destination_as,
+    e.import,
+    e.overall_type,
+    e.recorded_time AS exchange_report_time,
+    r.observed_route_id,
+    r.raw_line,
+    text(r.address_prefix) AS address_prefix,
+    r.recorded_time AS observed_route_time,
+    ri.category AS report_category,
+    ri.specific_case AS report_specific_case,
+    ri.str_content AS report_string_content,
+    ri.num_content AS report_numeric_content,
+    COUNT(*) OVER () AS total_items
+FROM
+    exchange_report e
+JOIN
+    observed_route r ON e.parent_observed_route = r.observed_route_id
+JOIN
+    report_item ri ON e.report_id = ri.parent_report
+WHERE
+    ri.specific_case = %s
+ORDER BY
+    exchange_report_time
+OFFSET
+    0
+LIMIT
+    10
+                """,
+        report_item_type,
+    )
+
+
+@app.route("/for_address_prefix/<string:address>/<int:prefix_length>", methods=["GET"])
+def get_for_address_prefix(address: str, prefix_length: int):
+    """Route, reports, and report items for the given address_prefix."""
+    try:
+        return execute_all(
+            # TODO: Paging from user.
+            # FIXME: Remove LIMIT 1.
+            """
+    SELECT
+        e.report_id,
+        e.from_as AS source_as,
+        e.to_as AS destination_as,
+        e.import,
+        e.overall_type,
+        e.recorded_time AS exchange_report_time,
+        ri.report_item_id,
+        ri.category AS report_category,
+        ri.specific_case AS report_specific_case,
+        ri.str_content AS report_string_content,
+        ri.num_content AS report_numeric_content,
+        COUNT(*) OVER () AS total_items
+    FROM
+        exchange_report e
+    JOIN
+        report_item ri ON e.report_id = ri.parent_report
+    WHERE
+        e.parent_observed_route = (SELECT observed_route_id FROM observed_route WHERE address_prefix = %s LIMIT 1)
+    ORDER BY
+        e.recorded_time
+    OFFSET
+        0
+    LIMIT
+        10
+                    """,
+            f"{address}/{prefix_length}",
+        )
+    except InvalidTextRepresentation:
+        return (
+            jsonify(
+                {
+                    "input_error": "Invalid address or prefix_length",
+                    "address": address,
+                    "prefix_length": prefix_length,
+                }
+            ),
+            400,
+        )
 
 
 @app.route("/overall_report_type/<string:overall_report_type>", methods=["GET"])
