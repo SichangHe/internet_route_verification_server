@@ -24,6 +24,8 @@ WITH result_set AS (
         report_item ri ON e.report_id = ri.parent_report
     WHERE
         e.overall_type = 'ok'
+    ORDER BY
+        e.recorded_time
 )
 -- Apply pagination
 SELECT
@@ -43,13 +45,11 @@ SELECT
     total_items
 FROM
     result_set
-ORDER BY
-    exchange_report.recorded_time
 OFFSET
     0
 LIMIT
-    10; 
-	
+    10;
+
 --Query ASes, routes, reports and report items for a given specific case
 --the report items belong to.
 SELECT
@@ -81,7 +81,7 @@ OFFSET
     0
 LIMIT
     10;
-	
+
 --Query reports and report items for a given Route object.
 SELECT
     e.report_id,
