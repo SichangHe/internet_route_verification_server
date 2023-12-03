@@ -1,6 +1,7 @@
 import psycopg
 from dotenv import load_dotenv
 from flask import Flask, jsonify, render_template
+from psycopg.rows import dict_row
 
 OVERALL_REPORT_TYPES = ("ok", "skip", "unrecorded", "special_case", "bad")
 REPORT_ITEM_TYPES = (
@@ -55,7 +56,7 @@ def is_valid_report_item_type(report_item_type: str):
 load_dotenv()
 app = Flask(__name__)
 
-conn = psycopg.connect(f"dbname=irv_server_test")
+conn = psycopg.connect(f"dbname=irv_server_test", row_factory=dict_row)
 
 
 @app.route("/rpsl_obj/<string:rpsl_obj_name>", methods=["GET"])
@@ -143,13 +144,7 @@ def execute_one(sql, *args):
     with conn.cursor() as cur:
         entry = cur.execute(sql, (*args,)).fetchone()
         if entry:
-            assert cur.description is not None
-            return jsonify(
-                {
-                    description[0]: value
-                    for description, value in zip(cur.description, entry)
-                }
-            )
+            return jsonify(entry)
     return jsonify({"message": "Entry not found"}), 404
 
 
