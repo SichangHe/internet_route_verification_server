@@ -45,8 +45,8 @@ REPORT_ITEM_TYPES = (
 )
 
 
-def is_valid_overall_type(overall_type: str):
-    return overall_type in OVERALL_REPORT_TYPES
+def is_valid_overall_report_type(overall_report_type: str):
+    return overall_report_type in OVERALL_REPORT_TYPES
 
 
 def is_valid_report_item_type(report_item_type: str):
@@ -61,13 +61,10 @@ conn = psycopg.connect(f"dbname=irv_server_test", row_factory=dict_row)
 
 @app.route("/rpsl_obj/<string:rpsl_obj_name>", methods=["GET"])
 def get_rpsl_obj_by_name(rpsl_obj_name):
-    with conn.cursor() as cur:
-        entry = cur.execute(
-            f"SELECT * FROM rpsl_obj WHERE rpsl_obj_name = %s", (rpsl_obj_name,)
-        ).fetchone()
-    if entry:
-        return jsonify(entry)
-    return jsonify({"message": "Entry not found"}), 404
+    return execute_one(
+        "SELECT * FROM rpsl_obj WHERE rpsl_obj_name = %s",
+        rpsl_obj_name,
+    )
 
 
 @app.route("/verification_reports/<int:observed_route_id>", methods=["GET"])
@@ -90,18 +87,26 @@ SELECT as_num, as_name, imports, exports FROM aut_num WHERE as_num = %s
     )
 
 
-@app.route("/as_for_overall_type/<string:overall_type>", methods=["GET"])
-def get_as_for_overall_type(overall_type: str):
-    """ASes that have at least one report with the given overall_type and
-    the number of reports with that overall_type."""
-    if not is_valid_overall_type(overall_type):
-        return jsonify({"message": "Invalid overall_type"}), 400
-    with conn.cursor() as cur:
-        results = cur.execute(
-            """
+@app.route("/as_for_overall_report_type/<string:overall_report_type>", methods=["GET"])
+def get_as_for_overall_report_type(overall_report_type: str):
+    """ASes that appear in at least one report with the given
+    overall_report_type and the number of reports with that overall_report_type.
+    """
+    if not is_valid_overall_report_type(overall_report_type):
+        return (
+            jsonify(
+                {
+                    "input_error": "Invalid overall_report_type",
+                    "possible_values": OVERALL_REPORT_TYPES,
+                }
+            ),
+            400,
+        )
+    return execute_all(
+        """
 WITH filtered_exchange_report AS (
     SELECT * FROM exchange_report WHERE overall_type = %s
-) SELECT aggregated_as.as_num, count(*) FROM (
+) SELECT aggregated_as.as_num, count(*) AS report_count FROM (
     (
         SELECT report_id, from_as AS as_num
         FROM filtered_exchange_report
@@ -115,16 +120,55 @@ WITH filtered_exchange_report AS (
 GROUP BY as_num
 ORDER BY as_num
                 """,
-            (overall_type,),
-        ).fetchall()
-    return jsonify(results)
+        overall_report_type,
+    )
 
 
-@app.route("/overall_type/<string:overall_type>", methods=["GET"])
-def get_by_overall_type(overall_type):
+@app.route("/as_for_report_item_type/<string:report_item_type>", methods=["GET"])
+def get_as_for_report_item_type(report_item_type: str):
+    """ASes that appear in at least one report item with the given
+    report_item_type and the number of report items with that report_item_type.
+    """
+    if not is_valid_report_item_type(report_item_type):
+        return (
+            jsonify(
+                {
+                    "input_error": "Invalid report_item_type",
+                    "possible_values": REPORT_ITEM_TYPES,
+                }
+            ),
+            400,
+        )
+    return execute_all(
+        """
+WITH filtered_report_item AS (
+    SELECT *
+    FROM report_item JOIN exchange_report ON parent_report = report_id
+    WHERE specific_case = %s
+) SELECT aggregated_as.as_num, count(*) AS report_item_count FROM (
+    (
+        SELECT report_item_id, from_as AS as_num
+        FROM filtered_report_item
+        ORDER BY as_num
+    ) UNION (
+        SELECT report_item_id, to_as AS as_num
+        FROM filtered_report_item
+        ORDER BY as_num
+    )
+) AS aggregated_as
+GROUP BY as_num
+ORDER BY as_num
+                """,
+        report_item_type,
+    )
+
+
+@app.route("/overall_report_type/<string:overall_report_type>", methods=["GET"])
+def get_by_overall_report_type(overall_report_type):
     with conn.cursor() as cur:
         reports = cur.execute(
-            "SELECT * FROM exchange_report WHERE overall_type = %s", (overall_type,)
+            "SELECT * FROM exchange_report WHERE overall_type = %s",
+            (overall_report_type,),
         ).fetchall()
     return jsonify(reports)
 
@@ -145,7 +189,12 @@ def execute_one(sql, *args):
         entry = cur.execute(sql, (*args,)).fetchone()
         if entry:
             return jsonify(entry)
-    return jsonify({"message": "Entry not found"}), 404
+    return jsonify({"information": "Entry not found"}), 404
+
+
+def execute_all(sql, *args):
+    with conn.cursor() as cur:
+        return jsonify(cur.execute(sql, (*args,)).fetchall())
 
 
 if __name__ == "__main__":
