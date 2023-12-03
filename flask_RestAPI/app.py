@@ -29,24 +29,14 @@ def get_verification_reports(observed_route_id):
     return jsonify(reports)
 
 
-@app.route("/as_info/<int:as_num>", methods=["GET"])
+@app.route("/aut_num/<int:as_num>", methods=["GET"])
 def get_as_info(as_num):
-    with conn.cursor() as cur:
-        entry = cur.execute(
-            """
+    return execute_one(
+        """
 SELECT as_num, as_name, imports, exports FROM aut_num WHERE as_num = %s
-            """,
-            (as_num,),
-        ).fetchone()
-        if entry:
-            assert cur.description is not None
-            return jsonify(
-                {
-                    description[0]: value
-                    for description, value in zip(cur.description, entry)
-                }
-            )
-    return jsonify({"message": "Entry not found"}), 404
+""",
+        as_num,
+    )
 
 
 @app.route("/overall_type/<string:overall_type>", methods=["GET"])
@@ -68,6 +58,20 @@ def index():
 @app.route("/About")
 def About():
     return render_template("about.html")
+
+
+def execute_one(sql, *args):
+    with conn.cursor() as cur:
+        entry = cur.execute(sql, (*args,)).fetchone()
+        if entry:
+            assert cur.description is not None
+            return jsonify(
+                {
+                    description[0]: value
+                    for description, value in zip(cur.description, entry)
+                }
+            )
+    return jsonify({"message": "Entry not found"}), 404
 
 
 if __name__ == "__main__":
