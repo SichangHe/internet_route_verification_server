@@ -64,7 +64,7 @@ create table if not exists rpsl_obj_mnt_by(
 	mntner_name text not null references maintainer,
 	primary key (rpsl_obj_name, mntner_name)
 );
-create table if not exists autonomous_system(
+create table if not exists autonomous_system( #!
 	as_num int primary key
 );
 create table if not exists aut_num(
@@ -74,13 +74,13 @@ create table if not exists aut_num(
 	exports json not null,
 	rpsl_obj_name text not null references rpsl_obj
 );
-create table if not exists observed_route(
-	observed_route_id serial primary key,
-	raw_line text not null,
+create table if not exists observed_route(   #!
+	_id serial primary key,
+	raw_observed_routeline text not null,
 	address_prefix inet not null,
 	recorded_time timestamp not null default now()
 );
-create table if not exists exchange_report(
+create table if not exists exchange_report(  #!
 	report_id serial primary key,
 	from_as int not null references autonomous_system,
 	to_as int not null references autonomous_system,
@@ -112,7 +112,7 @@ create table if not exists filter_set(
 	filter_set_name text primary key references rpsl_obj,
 	filters json not null
 );
-create table if not exists route_obj(
+create table if not exists route_obj(   #for a given as, 
 	address_prefix inet primary key,
 	origin int not null references autonomous_system,
 	rpsl_obj_name text not null references rpsl_obj

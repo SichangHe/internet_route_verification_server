@@ -117,3 +117,45 @@ OFFSET
     0
 LIMIT
     10;
+
+-- Newly added
+-- -- Reports for AutNum.
+
+SELECT report_id, from_as AS as_num
+FROM exchange_report
+JOIN autonomous_system ON exchange_report.from_as = autonomous_system.as_num
+WHERE as_num = %s
+union
+SELECT report_id, to_as AS as_num
+FROM exchange_report
+JOIN autonomous_system ON exchange_report.to_as = autonomous_system.as_num
+WHERE as_num = %s
+order by as_num;
+
+-- Routes for AutNum.
+select 
+	e.from_as as as_num,
+	o.observed_route_id,
+	o.raw_line,
+	o.address_prefix,
+	o.recorded_time
+from
+	exchange_report as e
+join
+	observed_route as o
+on e.parent_observed_route = o.observed_route_id
+where e.from_as=%s
+union
+select 
+	e.to_as as as_num,
+	o.observed_route_id,
+	o.raw_line,
+	o.address_prefix,
+	o.recorded_time
+from
+	exchange_report as e
+join
+	observed_route as o
+on e.parent_observed_route = o.observed_route_id
+where e.to_as=%s
+
