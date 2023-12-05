@@ -1,3 +1,4 @@
+-- Used.
 -- Query ASes, routes, reports, and report items for a given overall type
 -- the reports belong to with timestamps, item count, and paging.
 SELECT
@@ -30,7 +31,7 @@ OFFSET
 LIMIT
     10;
 
-	
+-- Used.
 --Query ASes, routes, reports and report items for a given specific case
 --the report items belong to.
 SELECT
@@ -62,7 +63,8 @@ OFFSET
     0
 LIMIT
     10;
-	
+
+-- Used.
 --Query reports and report items for a given Route object.
 SELECT
     e.report_id,
@@ -91,6 +93,7 @@ LIMIT
     10;
 
 -- Query verification reports for observed routes.
+-- FIXME: Unrealistic. User would not have observed_route_id.
 SELECT
     exchange_report.report_id,
     exchange_report.from_as,
