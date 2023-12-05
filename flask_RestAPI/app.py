@@ -125,6 +125,46 @@ ORDER BY as_num
     )
 
 
+@app.route(
+    "/route_for_overall_report_type_import_by_provider/<string:overall_report_type>",
+    methods=["GET"],
+)
+def get_route_for_overall_report_type_import_by_provider(overall_report_type: str):
+    """Routes that appear in at least one import report by a provider with
+    the given overall_report_type and the number of reports with that
+    overall_report_type.
+    Potentially route leaks if bad.
+    """
+    if not is_valid_overall_report_type(overall_report_type):
+        return (
+            jsonify(
+                {
+                    "input_error": "Invalid overall_report_type",
+                    "possible_values": OVERALL_REPORT_TYPES,
+                }
+            ),
+            400,
+        )
+    # TODO: Paging.
+    return execute_all(
+        """
+SELECT
+    observed_route_id,
+    raw_line,
+    text(address_prefix),
+    observed_route.recorded_time,
+    count(*) AS report_count
+FROM exchange_report
+JOIN provide_customer ON from_as = customer AND to_as = provider
+JOIN observed_route ON parent_observed_route = observed_route_id
+WHERE overall_type = %s AND import = true
+GROUP BY
+    observed_route_id, raw_line, address_prefix, observed_route.recorded_time
+                """,
+        overall_report_type,
+    )
+
+
 @app.route("/as_for_report_item_type/<string:report_item_type>", methods=["GET"])
 def get_as_for_report_item_type(report_item_type: str):
     """ASes that appear in at least one report item with the given
