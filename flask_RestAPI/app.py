@@ -201,6 +201,33 @@ LIMIT 10
     )
 
 
+@app.route(
+    "/as_lacking_rules_for_import_by_provider",
+    methods=["GET"],
+)
+def get_as_lacking_rules_for_import_by_provider():
+    """ASes that appear in at least one import report by a provider with
+    unrecorded import/export rules, and the number of reports items.
+    ASes that should be specifying RPSL rules to improve robustness.
+    """
+    # TODO: Paging.
+    return execute_all(
+        """
+SELECT to_as AS as_num, count(*) AS report_item_count
+FROM report_item
+JOIN exchange_report on parent_report = report_id
+JOIN provide_customer ON from_as = customer AND to_as = provider
+WHERE
+    import = true AND
+    specific_case in ('unrec_import_empty', 'unrec_export_empty')
+GROUP BY
+    as_num
+ORDER BY report_item_count DESC
+LIMIT 10
+                """
+    )
+
+
 @app.route("/as_for_report_item_type/<string:report_item_type>", methods=["GET"])
 def get_as_for_report_item_type(report_item_type: str):
     """ASes that appear in at least one report item with the given
