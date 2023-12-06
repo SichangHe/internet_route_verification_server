@@ -1,5 +1,5 @@
 [package]
-name = "route_verification_server"
+name = "route_verification_server_loader"
 version = "0.1.0"
 edition = "2021"
 
