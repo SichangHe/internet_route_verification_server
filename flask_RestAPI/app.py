@@ -221,50 +221,31 @@ def get_for_overall_report_type(overall_report_type: str):
     return execute_all(
         # TODO: Paging from user.
         """
-WITH result_set AS (
-    SELECT
-        e.from_as AS source_as,
-        e.to_as AS destination_as,
-        e.import,
-        e.overall_type,
-        e.recorded_time AS exchange_report_time,
-        r.observed_route_id,
-        r.raw_line,
-        r.address_prefix,
-        r.recorded_time AS observed_route_time,
-        ri.category AS report_category,
-        ri.specific_case AS report_specific_case,
-        ri.str_content AS report_string_content,
-        ri.num_content AS report_numeric_content,
-        COUNT(*) OVER () AS total_items -- Total item count
-    FROM
-        exchange_report e
-    JOIN
-        observed_route r ON e.parent_observed_route = r.observed_route_id
-    LEFT JOIN
-        report_item ri ON e.report_id = ri.parent_report
-    WHERE
-        e.overall_type = %s
-    ORDER BY
-        e.recorded_time
-)
 SELECT
-    source_as,
-    destination_as,
-    import,
-    overall_type,
-    exchange_report_time,
-    observed_route_id,
-    raw_line,
-    text(address_prefix) AS address_prefix,
-    observed_route_time,
-    report_category,
-    report_specific_case,
-    report_string_content,
-    report_numeric_content,
-    total_items
+    e.from_as AS source_as,
+    e.to_as AS destination_as,
+    e.import,
+    e.overall_type,
+    e.recorded_time AS exchange_report_time,
+    r.observed_route_id,
+    r.raw_line,
+    text(r.address_prefix) AS address_prefix,
+    r.recorded_time AS observed_route_time,
+    ri.category AS report_category,
+    ri.specific_case AS report_specific_case,
+    ri.str_content AS report_string_content,
+    ri.num_content AS report_numeric_content,
+    COUNT(*) OVER () AS total_items
 FROM
-    result_set
+    exchange_report e
+JOIN
+    observed_route r ON e.parent_observed_route = r.observed_route_id
+LEFT JOIN
+    report_item ri ON e.report_id = ri.parent_report
+WHERE
+    e.overall_type = %s
+ORDER BY
+    e.recorded_time
 OFFSET
     0
 LIMIT
@@ -382,6 +363,63 @@ def get_by_overall_report_type(overall_report_type):
             (overall_report_type,),
         ).fetchall()
     return jsonify(reports)
+
+
+@app.route("/report_for_as/<int:as_num>", methods=["GET"])
+def get_report_for_as(as_num):
+    return execute_all(
+        """
+SELECT * FROM (
+    SELECT report_id
+    FROM exchange_report
+    JOIN autonomous_system ON exchange_report.from_as = autonomous_system.as_num
+    WHERE as_num = %s
+    union
+    SELECT report_id
+    FROM exchange_report
+    JOIN autonomous_system ON exchange_report.to_as = autonomous_system.as_num
+    WHERE as_num = %s
+) AS as_and_report
+natural JOIN exchange_report
+ORDER BY report_id
+                       """,
+        as_num,
+        as_num,
+    )
+
+@app.route("/route_for_as/<int:as_num>", methods=["GET"])
+def get_route_for_as(as_num):
+    return execute_all(
+        """
+select
+    e.from_as as as_num,
+    o.observed_route_id,
+    o.raw_line,
+    text(o.address_prefix) as address_prefix,
+    o.recorded_time
+from
+    exchange_report as e
+join
+    observed_route as o
+on e.parent_observed_route = o.observed_route_id
+where e.from_as = %s
+union
+select
+    e.to_as as as_num,
+    o.observed_route_id,
+    o.raw_line,
+    text(o.address_prefix) as address_prefix,
+    o.recorded_time
+from
+    exchange_report as e
+join
+    observed_route as o
+on e.parent_observed_route = o.observed_route_id
+where e.to_as = %s
+                       """,
+        as_num,
+        as_num,
+    )
 
 
 @app.route("/")
