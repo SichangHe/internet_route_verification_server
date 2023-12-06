@@ -118,7 +118,7 @@ OFFSET
 LIMIT
     10;
 
--- Newly added
+-- Used.
 -- -- Reports for AutNum.
 
 SELECT * FROM (
@@ -135,6 +135,7 @@ SELECT * FROM (
 natural JOIN exchange_report
 ORDER BY report_id;
 
+-- Used.
 -- Routes for AutNum.
 select
     e.from_as as as_num,
