@@ -165,6 +165,42 @@ GROUP BY
     )
 
 
+@app.route(
+    "/as_for_overall_report_type_import_by_provider/<string:overall_report_type>",
+    methods=["GET"],
+)
+def get_as_for_overall_report_type_import_by_provider(overall_report_type: str):
+    """ASes that appear in at least one import report by a provider with
+    the given overall_report_type and the number of reports with that
+    overall_report_type.
+    ASes potentially having route leaks and should look into filters if bad.
+    """
+    if not is_valid_overall_report_type(overall_report_type):
+        return (
+            jsonify(
+                {
+                    "input_error": "Invalid overall_report_type",
+                    "possible_values": OVERALL_REPORT_TYPES,
+                }
+            ),
+            400,
+        )
+    # TODO: Paging.
+    return execute_all(
+        """
+SELECT to_as AS as_num, count(*) AS report_count
+FROM exchange_report
+JOIN provide_customer ON from_as = customer AND to_as = provider
+WHERE overall_type = %s AND import = true
+GROUP BY
+    to_as
+ORDER BY report_count DESC
+LIMIT 10
+                """,
+        overall_report_type,
+    )
+
+
 @app.route("/as_for_report_item_type/<string:report_item_type>", methods=["GET"])
 def get_as_for_report_item_type(report_item_type: str):
     """ASes that appear in at least one report item with the given
@@ -386,6 +422,7 @@ ORDER BY report_id
         as_num,
         as_num,
     )
+
 
 @app.route("/route_for_as/<int:as_num>", methods=["GET"])
 def get_route_for_as(as_num):
