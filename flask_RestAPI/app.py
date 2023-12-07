@@ -486,17 +486,6 @@ where e.to_as = %s
     )
 
 
-@app.route("/")
-def index():
-    return render_template("index.html")
-
-
-# write about page
-@app.route("/About")
-def About():
-    return render_template("about.html")
-
-
 def execute_one(sql, *args):
     with conn.cursor() as cur:
         entry = cur.execute(sql, (*args,)).fetchone()
